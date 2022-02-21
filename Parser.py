@@ -22,32 +22,45 @@ class Parser:
         # 1. split by semicolon
         titles = title.split(";")
         for t in titles:
-            t = re.sub(r" ?in general$", "", t.strip()) # remove "in general" at the end of the title
+            t = re.sub(r" ?in general$", "", t.strip(", ")) # remove "in general" at the end of the title
             res_forest[t] = Node(t)
 
         # 2. split by e.g.
             if "e.g." in t:
                 try:
                     eg_p, eg_c = t.split('e.g.')
-                    eg_p = re.sub(r" ?in general$", "", eg_p.strip(" ,"))
+                    eg_p = re.sub(r" ?in general$", "", eg_p.strip(", "))
                     eg_c_nodes = [eg_c]
                 except ValueError: # more than one "e.g." in the title
-                    eg_list = t.split('e.g.')
-                    eg_p = re.sub(r" ?in general$", "", eg_list[0].strip(" ,")) 
+                    eg_list = [eg.strip(", ") for eg in t.split('e.g.')]
+                    eg_p = re.sub(r" ?in general$", "", eg_list[0]) 
                     
                     second_eg = " ".join([eg_list[1], eg_list[2]]) if eg_list[2].split()[0] in self.prep_list or eg_list[1].split()[-1] in self.prep_list else "e.g.".join([eg_list[1], eg_list[2]])
                     eg_c_nodes = [eg_list[1], second_eg]
 
+                res_forest[t] = Node(eg_p)     
+                t_children = []
                 for eg_c in eg_c_nodes:
-                    eg_c = re.sub(r" ?in general$", "", eg_c.strip())
+                    eg_c = re.sub(r" ?in general$", "", eg_c.strip(", "))
 
                     # if the first word of example or the final word of head is a preprosition, concatename their names
                     if eg_c.split()[0] in self.prep_list or eg_p.split()[-1] in self.prep_list:   
-                        child_title = " ".join([t, eg_c])
+                        child_title = " ".join([eg_p, eg_c])
                     else:
                         child_title = eg_c
-                    res_forest[child_title] = Node(child_title, parent = res_forest[t])  
+                    t_children.append(Node(child_title))
+                res_forest[t].children = t_children
+
+                # for pre, fill, node in RenderTree(res_forest[t]):
+                #     print("%s%s" % (pre, node.name))
         return res_forest
+
+    def valide(self, p_node: str, c_nodes: list) -> list:
+        """
+        check whether children nodes has the same title as parent title
+        """
+        p_name = p_node.name
+        return [c for c in c_nodes if c.name != p_name]
 
     def update_child_layer(self, p_node: Node, c_nodes: list, clean_p: bool) -> Node:
         """
@@ -60,12 +73,15 @@ class Parser:
 
         for c in c_nodes:
             # if the first word of example or the final word of head is a preprosition, concatename their names
-            if c.name.split()[0] in self.prep_list or p_node.name.split()[-1] in self.prep_list:
-                c.name = " ".join([p_node.name, c.name])
+            try:
+                if c.name.split()[0] in self.prep_list or p_node.name.split()[-1] in self.prep_list:
+                    c.name = " ".join([p_node.name, c.name])
+            except IndexError:
+                c_nodes.remove(c)
+
         children_list.extend(c_nodes)
         p_node.children = children_list
         return p_node
-
 
     def dfs_postorder(self, arr: list, root_node: Node) -> list:
         """
@@ -91,16 +107,13 @@ class Parser:
         for node in nodes_to_search:
             p_node = copy.deepcopy(node.parent)
             if p_node:
-                c_layer = list(self.split(node.name).values())
+                c_layer = list(self.split(node.name).values())  # a list of Nodes
                 
                 # if child node has children nodes already updated
                 if node.name + str(node.depth) in saved_nodes:
                     siblings = saved_nodes[node.name + str(node.depth)]
                     for c in c_layer:
-                        c.children = copy.deepcopy(siblings.children)  
-
-                # print("parent", p_node)
-                # print("children", c_layer)
+                        c.children = self.valide(c, copy.deepcopy(siblings.children))
 
                 if p_node.name + str(p_node.depth) in saved_nodes:
                     new_p = False  
@@ -111,7 +124,6 @@ class Parser:
 
                 # update parent node in result dictionary
                 saved_nodes[p_node.name+str(p_node.depth)] = p_v
-
             else:
                 top_layer.append(saved_nodes[node.name + str(node.depth)])
             
@@ -119,9 +131,3 @@ class Parser:
         for pre, fill, node in RenderTree(res_root):
             print("%s%s" % (pre, node.name))
         return res_root
-
-
-
-# example
-parser = Parser()
-parser.get_taxonomy(tree_A.root, 'A')
