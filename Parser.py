@@ -1,18 +1,37 @@
 from anytree import Node, RenderTree
 from collections import defaultdict
-import re
-import copy
+import re, copy
 
 class Parser:
     """
     Basic parser for spliting cpc titles into its taxonomy structure.
     The parser divides a (two-layer) tree into branches.
     """
-
     def __init__(self, prepositions_file='prep_en.txt'):
         self.prep_file = prepositions_file
 
         self.prep_list = open(self.prep_file, 'r').read().splitlines()
+
+    def filter(self, title: str) -> bool:
+        if "their" in title:
+            return True
+
+        title_words = title.split()
+        if "such" in title_words:
+            if "such as" in title or "such a" in title:
+                return False
+            else:
+                # check whether the noun modified by "such" has already appeared in the the title description
+                such_noun = re.search("such (\w)*", title)
+                if such_noun:
+                    such_noun = such_noun.group(0)
+                    word_after_such = such_noun.split()[-1]
+                    if word_after_such in title.replace(such_noun, ""):
+                        return False
+                    else:
+                        return True
+                else:
+                    return False
         
     def split(self, title: str) -> dict:
         res_forest = {}
@@ -24,6 +43,9 @@ class Parser:
         titles = title.split(";")
         for t in titles:
             t = re.sub(r"[ ,]?in general$", "", t.strip(", ")).strip(", ") # remove "in general" at the end of the title
+            # filter titles having "their" inside
+            if self.filter(t):
+                continue
             res_forest[t] = Node(t)
 
         # 2. split by e.g.
@@ -72,22 +94,19 @@ class Parser:
         c_nodes = [c for c in c_nodes if c.name != p_name]
 
         dict_name_siblings = defaultdict(list)  # values of dictinary are lists of Nodes
-        #nodes_name = [c.name for c in c_nodes]
-
         for c in c_nodes:
             dict_name_siblings[c.name].append(c)
-        flag = False
+        
         for k,v in dict_name_siblings.items():
-            if len(v) > 1:
-                flag = True
-        if flag:
-            for k, v in dict_name_siblings.items():
-                print(k)
-                print(v)
-                print("\n")
-            asdf
-        return c_nodes
+            head_node = v[0]
+            if len(v) > 1:   
+                head_children = list(copy.deepcopy(head_node.children))
+                for other_node in v[1:]:
+                    head_children.extend(list(copy.deepcopy(other_node.children)))
+                head_node.children = head_children
+            dict_name_siblings[k] = head_node
     
+        return list(dict_name_siblings.values())
 
     def update_child_layer(self, p_node: Node, c_nodes: list, clean_p: bool) -> Node:
         """

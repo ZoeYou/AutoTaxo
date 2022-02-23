@@ -1,6 +1,7 @@
 from anytree import Node, RenderTree
 from pathlib import Path
 from tqdm import tqdm
+
 import re, copy
 import pandas as pd
 import Parser
@@ -24,7 +25,6 @@ def convert_to_int(x):
         elif len(title) == 4:
             return -1
 
-
 def clean_descr(description):
     """
     1. remove references from the description, such as (preserving A23B; obtaining protein compositions for foodstuffs A23J1/00;)
@@ -36,10 +36,9 @@ def clean_descr(description):
     description = re.sub(r'[ ,]*i\.e\..*', '', description)
     return description.lower()
 
-
 def has_cpc(description):
     """
-    4. check whether a desciption has CPC code inside
+    4. check whether a title desciption has CPC code inside
     """
     cpc_pattern = r'[A-Za-z]{1}[0-9]{2}[A-Za-z]{0,1}[0-9]*[\/]*[0-9]*'
     match = re.search(cpc_pattern, description)
@@ -48,24 +47,34 @@ def has_cpc(description):
     else:
         return False
 
+def is_trash_title(description):
+    description = description.lower()
+    if ("subject matter not" in description and "provided for in" in description) or ("covered by" in description and " subclass " in description and " other " in description) or ("dummy group" in description):
+        return True
+    else:
+        return False
+
 def next_same_lvl_index(subdf,lvl):
     lvl_df = subdf[subdf['lvl'] == lvl]
     idx_df = lvl_df.index
+    if len(idx_df) == 1:
+        return idx_df[0]
+
     res_index = idx_df[1] - 1
     return res_index
 
-def rm_cpctitle_with_subtree(dataframe):
+def rm_title_with_subtree(dataframe):
     """
     remove those titles with codes in their description and its subtree titles
     """
     # get indices of description 
     dataframe = dataframe.reset_index(drop=True)
-    id_hascpc = dataframe[dataframe['description'].apply(has_cpc)].index
+    id_hascpc = dataframe[dataframe['description'].apply(has_cpc) | dataframe['description'].apply(is_trash_title)].index
     
     idx_to_drop = []
     for i in id_hascpc:
         l = dataframe.iloc[i]
-        if l['lvl'] >= dataframe.iloc[i+1]['lvl']:
+        if i == (dataframe.shape[0]-1) or l['lvl'] >= dataframe.iloc[i+1]['lvl']: 
             idx_to_drop.append(i)
         else:
             j = next_same_lvl_index(dataframe[i:], l['lvl'])
@@ -79,16 +88,6 @@ def rm_cpctitle_with_subtree(dataframe):
     dataframe = dataframe.drop(idx_to_drop)
     return dataframe.reset_index(drop=True)
 
-
-def is_trash_title(description):
-    description = description.lower()
-    if "subject matter not" in description and "provided for in" in description:
-        return True
-    elif "covered by" in description and "subclass" in description and "other" in description:
-        return True
-    else:
-        return False
-
 def read_label_file(file_name, max_level=TARGET_LEVEL):
     df = pd.read_csv(file_name, header=None, sep='\t', dtype=object, names=['title', 'lvl', 'description'])
     df['lvl'] = df.apply(convert_to_int, axis=1)
@@ -97,8 +96,7 @@ def read_label_file(file_name, max_level=TARGET_LEVEL):
         df = df[df['lvl']<=dict_lvl[max_level]]
 
     df['description'] = df['description'].apply(clean_descr)
-    df = df[~df['description'].apply(is_trash_title)]    # remove titles that are used as trash classes
-    df = rm_cpctitle_with_subtree(df)
+    df = rm_title_with_subtree(df)
     return df.dropna().reset_index(drop=True)
 
 def find_father(df, child_lvl):
