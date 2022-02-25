@@ -25,7 +25,7 @@ class Parser:
             if "such as" in title or "such a" in title:
                 return False
             else:
-                # check whether the noun modified by "such" has already appeared in the the title description
+                # check whether the noun modified by "such" has already appeared in the title description
                 such_noun = re.search("such (\w)*", title, re.IGNORECASE)
                 if such_noun:
                     such_noun = such_noun.group(0)
@@ -60,13 +60,15 @@ class Parser:
                     eg_c = re.sub(r"[ ,]?(in general| or the like)$", "", eg_c.strip(", "), flags=re.IGNORECASE)
                     res_forest[t] = Node(eg_p)
 
-                    # if the first word of example or the final word of head is a preprosition, concatename their names
+                    # if the first word of example or the final word of main description is a preprosition, concatename them
                     try:
                         if eg_c.split()[0].lower() in self.prep_list or eg_p.split()[-1].lower() in self.prep_list:   
                             eg_c = " ".join([eg_p, eg_c])
-                        res_forest[t].children = [Node(eg_c.capitalize())]
+                        else:
+                            eg_c = eg_c.capitalize()
+                        res_forest[t].children = [Node(eg_c)]
                     except IndexError:
-                         continue   # child node no content
+                         continue   # child node without content
 
                 except ValueError: # more than one "e.g." in the title
                     eg_list = [eg.strip(", ") for eg in t.split('e.g.')]
@@ -79,8 +81,10 @@ class Parser:
                         eg_c = eg_list[i] 
                         # if the first word of example or the final word of head is a preprosition, concatename their names
                         if eg_c.split()[0].lower() in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:   
-                            eg_c = " ".join([eg_list[i-1], eg_c])                 
-                        node_2_add = Node(eg_c.capitalize())
+                            eg_c = " ".join([eg_list[i-1], eg_c])  
+                        else:
+                            eg_c = eg_c.capitalize()               
+                        node_2_add = Node(eg_c)
                         try:
                             node_2_add.children = [Node_list[-1]]
                         except IndexError:
@@ -126,12 +130,22 @@ class Parser:
                 else:
                     words_list = words_list[:-1]
                     c.name = " ".join(words_list)
-                c_nodes[i] = c 
 
             # if the first character of children node is in lower case, then concatenate with parent node
             if c.name[0].islower(): 
                 c.name = " ".join([p_name,c.name])
-                c_nodes[i] = c      
+
+                c_siblings = list(copy.deepcopy(c.children))
+                if c_siblings:
+                    for j in range(len(c_siblings)):
+                        sib = copy.deepcopy(c_siblings[j])
+                        if sib.name[0].islower():                                                
+                            sib.parent.name = c.name
+                            sib.name = " ".join([p_name, sib.name])
+                            c_siblings[j] = sib
+                    c.childern = [] #TODO zy: no idea why it works :)
+                    c.children = c_siblings
+            c_nodes[i] = c
         return c_nodes
 
     def update_child_layer(self, p_node: Node, c_nodes: list, clean_p: bool) -> Node:
