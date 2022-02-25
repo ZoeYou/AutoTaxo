@@ -1,14 +1,8 @@
-from anytree import Node, RenderTree
-from pathlib import Path
-from tqdm import tqdm
-
-import re, copy
+from anytree import Node
+import re
 import pandas as pd
-import Parser
 
-TARGET_LEVEL = 6
-ADD_LABEL = True
-
+TARGET_LEVEL = 8
 
 global dict_lvl
 dict_lvl = {1: -3, 3: -2, 4: -1, 6: 0}
@@ -125,22 +119,3 @@ def build_tree(df):
         father_title = find_father(df[:i], child_lvl)
         node_dict[child_title] = Node(child_desc, parent = node_dict[father_title])
     return node_dict[root_title]
-
-
-
-if __name__ == '__main__':
-    files_list = [str(f) for f in Path("cpc-titles").glob("*.txt")]
-    output_path = Path("results")
-
-    parser = Parser.Parser()
-    for f in tqdm(files_list):
-        name = f.split("_")[0][-1]
-        df = read_label_file(f)
-        tree = build_tree(df)
-        res_root = parser.get_taxonomy(tree.root, name)
-
-        output_file = output_path / (name + '.txt')
-        with output_file.open('w') as out_f:
-            for pre, _, node in RenderTree(res_root):
-                out_f.write("%s%s" % (pre, node.name))
-                out_f.write("\n")

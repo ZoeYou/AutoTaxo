@@ -1,6 +1,7 @@
 from xml.dom.minicompat import NodeList
-from anytree import Node, RenderTree
+from anytree import Node, PostOrderIter
 from collections import defaultdict
+from tqdm import tqdm
 import re, copy
 
 class Parser:
@@ -61,9 +62,9 @@ class Parser:
 
                     # if the first word of example or the final word of head is a preprosition, concatename their names
                     try:
-                        if eg_c.split()[0] in self.prep_list or eg_p.split()[-1] in self.prep_list:   
+                        if eg_c.split()[0].lower() in self.prep_list or eg_p.split()[-1].lower() in self.prep_list:   
                             eg_c = " ".join([eg_p, eg_c])
-                        res_forest[t].children = [Node(eg_c)]
+                        res_forest[t].children = [Node(eg_c.capitalize())]
                     except IndexError:
                          continue   # child node no content
 
@@ -77,9 +78,9 @@ class Parser:
                     for i in range(1, len(eg_list))[::-1]:
                         eg_c = eg_list[i] 
                         # if the first word of example or the final word of head is a preprosition, concatename their names
-                        if eg_c.split()[0] in self.prep_list or eg_list[i-1].split()[-1] in self.prep_list or eg_c[0].islower():   
+                        if eg_c.split()[0].lower() in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:   
                             eg_c = " ".join([eg_list[i-1], eg_c])                 
-                        node_2_add = Node(eg_c)
+                        node_2_add = Node(eg_c.capitalize())
                         try:
                             node_2_add.children = [Node_list[-1]]
                         except IndexError:
@@ -125,8 +126,12 @@ class Parser:
                 else:
                     words_list = words_list[:-1]
                     c.name = " ".join(words_list)
-                c_nodes[i] = c           
+                c_nodes[i] = c 
 
+            # if the first character of children node is in lower case, then concatenate with parent node
+            if c.name[0].islower(): 
+                c.name = " ".join([p_name,c.name])
+                c_nodes[i] = c      
         return c_nodes
 
     def update_child_layer(self, p_node: Node, c_nodes: list, clean_p: bool) -> Node:
@@ -138,39 +143,26 @@ class Parser:
         else:
             children_list = list(p_node.children)   # original children nodes of the parent node
         for c in c_nodes:
-            # if the first word of example or the final word of head is a preprosition, concatename their names
-            try:
-                if c.name.split()[0] in self.prep_list or c.name[0].islower(): # or p_node.name.split()[-1] in self.prep_list TODO
-                    c.name = " ".join([p_node.name, c.name])
-            except IndexError:
+            # check if vide name, if yes delete it
+            if not c.name:
                 c_nodes.remove(c)
         
         children_list.extend(c_nodes)                   
         p_node.children = children_list
-        return p_node
-
-    def dfs_postorder(self, arr: list, root_node: Node) -> list:
-        """
-        return a list of tree nodes by post order: first leaf nodes then parent node
-        """
-        children_list =  copy.deepcopy(root_node.children)
-        if children_list:
-            for c_node in children_list:
-                self.dfs_postorder(arr,c_node)
-        arr.append(root_node)
-        return arr         
+        return p_node        
 
     def get_taxonomy(self, root_node: str, root_name: str) -> Node:
         # create new root node 
         res_root = Node(root_name)
 
         # all nodes in post order 
-        nodes_to_search = self.dfs_postorder([], root_node)
+        nodes_to_search = [node for node in PostOrderIter(root_node)]
         
         saved_nodes = {}
         top_layer = []
-          
-        for node in nodes_to_search:
+        
+        print(f"Creating taxonomy tree for {root_name} ...")
+        for node in tqdm(nodes_to_search):
             c_layer = list(self.split(node.name).values()) # returns a list of Nodes after splitting
 
             # preprocessing for titles with "therefor" "thereof" etc.
