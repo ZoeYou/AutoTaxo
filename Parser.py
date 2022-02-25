@@ -1,3 +1,4 @@
+from xml.dom.minicompat import NodeList
 from anytree import Node, RenderTree
 from collections import defaultdict
 import re, copy
@@ -5,12 +6,14 @@ import re, copy
 class Parser:
     """
     Basic parser for spliting cpc titles into its taxonomy structure.
-    The parser divides a (two-layer) tree into branches.
     """
     def __init__(self, prepositions_file='prep_en.txt'):
         self.prep_file = prepositions_file
-
         self.prep_list = open(self.prep_file, 'r').read().splitlines()
+        self.there_dict = {"thereof": "of",
+                           "therefor": "for",
+                           "therefore": "for",
+                           "therewith": "with"}
 
     def filter(self, title: str) -> bool:
         if "their" in title:
@@ -22,7 +25,7 @@ class Parser:
                 return False
             else:
                 # check whether the noun modified by "such" has already appeared in the the title description
-                such_noun = re.search("such (\w)*", title)
+                such_noun = re.search("such (\w)*", title, re.IGNORECASE)
                 if such_noun:
                     such_noun = such_noun.group(0)
                     word_after_such = such_noun.split()[-1]
@@ -37,12 +40,12 @@ class Parser:
         res_forest = {}
 
         # remove "not otherwise provided for" from title
-        title = re.sub(r"[ ,]?not otherwise provided for[, ]?", "", title)
+        title = re.sub(r"[ ,]?not otherwise provided for[, ]?", "", title, flags=re.IGNORECASE)
 
         # 1. split by semicolon
         titles = title.split(";")
         for t in titles:
-            t = re.sub(r"[ ,]?in general$", "", t.strip(", ")).strip(", ") # remove "in general" at the end of the title
+            t = re.sub(r"[ ,]?(in general| or the like)$", "", t.strip(", "), flags=re.IGNORECASE).strip(", ") # remove "in general" or "all the like" at the end of the title
             # filter titles having "their" inside
             if self.filter(t):
                 continue
@@ -52,8 +55,8 @@ class Parser:
             if "e.g." in t:
                 try:
                     eg_p, eg_c = t.split('e.g.')
-                    eg_p = re.sub(r"[ ,]?in general$", "", eg_p.strip(", "))
-                    eg_c = re.sub(r"[ ,]?in general$", "", eg_c.strip(", "))
+                    eg_p = re.sub(r"[ ,]?(in general| or the like)$", "", eg_p.strip(", "), flags=re.IGNORECASE)
+                    eg_c = re.sub(r"[ ,]?(in general| or the like)$", "", eg_c.strip(", "), flags=re.IGNORECASE)
                     res_forest[t] = Node(eg_p)
 
                     # if the first word of example or the final word of head is a preprosition, concatename their names
@@ -66,7 +69,7 @@ class Parser:
 
                 except ValueError: # more than one "e.g." in the title
                     eg_list = [eg.strip(", ") for eg in t.split('e.g.')]
-                    eg_list = [re.sub(r"[ ,]?in general$", "", eg) for eg in eg_list]
+                    eg_list = [re.sub(r"[ ,]?(in general| or the like)$", "", eg, flags=re.IGNORECASE) for eg in eg_list]
                     eg_p = eg_list[0]
 
                     res_forest[t] = Node(eg_p)
@@ -74,7 +77,7 @@ class Parser:
                     for i in range(1, len(eg_list))[::-1]:
                         eg_c = eg_list[i] 
                         # if the first word of example or the final word of head is a preprosition, concatename their names
-                        if eg_c.split()[0] in self.prep_list or eg_list[i-1].split()[-1] in self.prep_list:   
+                        if eg_c.split()[0] in self.prep_list or eg_list[i-1].split()[-1] in self.prep_list or eg_c[0].islower():   
                             eg_c = " ".join([eg_list[i-1], eg_c])                 
                         node_2_add = Node(eg_c)
                         try:
@@ -88,7 +91,8 @@ class Parser:
     def valide(self, p_node: str, c_nodes: list) -> list:
         """
         1. check whether children nodes have the same title as parent title, if true remove the title in children nodes
-        2. check whether children nodes have repeated titles among each other, if true combine their sibling nodes 
+        2. check whether children nodes have repeated titles among each other, if true combine their sibling nodes
+        3. check if children nodes are ended with "thereof", "therefor"/"therefore" and "therewith" (without "or" also in the title), if true remove them
         """
         p_name = p_node.name
         c_nodes = [c for c in c_nodes if c.name != p_name]
@@ -97,6 +101,7 @@ class Parser:
         for c in c_nodes:
             dict_name_siblings[c.name].append(c)
         
+        # remove duplication children nodes
         for k,v in dict_name_siblings.items():
             head_node = v[0]
             if len(v) > 1:   
@@ -105,8 +110,24 @@ class Parser:
                     head_children.extend(list(copy.deepcopy(other_node.children)))
                 head_node.children = head_children
             dict_name_siblings[k] = head_node
-    
-        return list(dict_name_siblings.values())
+        c_nodes = list(dict_name_siblings.values())
+
+        # titles end with therefor etc. concatenate its parent node to it (if too long just ignore and remove the last word)
+        # nodes_to_remove = []
+        for i in range(len(c_nodes)): 
+            c = c_nodes[i]
+            words_list = c.name.strip().split()          
+            last_word = words_list[-1].lower()
+
+            if last_word in self.there_dict.keys() and (not (" or parts thereof" in c.name or " OR PARTS THEREOF" in c.name)):            
+                if len(words_list) < 5 and len(p_name.split()) < 5:
+                    c.name = " ".join(words_list[:-1] + [self.there_dict[last_word]] + p_name.lower().split())
+                else:
+                    words_list = words_list[:-1]
+                    c.name = " ".join(words_list)
+                c_nodes[i] = c           
+
+        return c_nodes
 
     def update_child_layer(self, p_node: Node, c_nodes: list, clean_p: bool) -> Node:
         """
@@ -119,7 +140,7 @@ class Parser:
         for c in c_nodes:
             # if the first word of example or the final word of head is a preprosition, concatename their names
             try:
-                if c.name.split()[0] in self.prep_list: # or p_node.name.split()[-1] in self.prep_list TODO
+                if c.name.split()[0] in self.prep_list or c.name[0].islower(): # or p_node.name.split()[-1] in self.prep_list TODO
                     c.name = " ".join([p_node.name, c.name])
             except IndexError:
                 c_nodes.remove(c)
@@ -150,7 +171,29 @@ class Parser:
         top_layer = []
           
         for node in nodes_to_search:
-            c_layer = list(self.split(node.name).values())  # returns a list of Nodes after splitting
+            c_layer = list(self.split(node.name).values()) # returns a list of Nodes after splitting
+
+            # preprocessing for titles with "therefor" "thereof" etc.
+            nodes_to_remove = []
+            for i in range(len(c_layer)):
+                c = c_layer[i]
+
+                words_list = c.name.strip().split()    
+                try:      
+                    last_word = words_list[-1].lower()
+                except IndexError:
+                        continue
+                if last_word in self.there_dict.keys() and (not (" or parts thereof" in c.name or " OR PARTS THEREOF" in c.name)):
+                    if len(c_layer) > 1:
+                        # concatenate the content of current node with its previous brother node if possible
+                        brother_name = c_layer[i-1].name
+                        brother_lasw = brother_name.split()[-1].lower()
+                        if len(words_list) < 5 and len(brother_name.split()) < 5 and not (brother_lasw in self.there_dict.keys()):
+                            c.name = " ".join(words_list[:-1] + [self.there_dict[last_word]] + brother_name.lower().split())
+                            c_layer[i] = c 
+                        else:
+                            nodes_to_remove.append(c)
+            c_layer = [c for c in c_layer if not (c in nodes_to_remove)]
                 
             # if current node has children nodes already updated
             if node.name + str(node.depth) in saved_nodes:
