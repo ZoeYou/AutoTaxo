@@ -53,6 +53,21 @@ class Parser:
             title = " ".join(title_words)
         return title
 
+    def _attach_to_parent(self, parent_node: str, child_node: str, child_fst_word: str, for_eg: str = True) -> str:
+        parent_words = parent_node.lower().split()
+
+        cond = child_fst_word in parent_words
+        if for_eg:
+            cond = (child_fst_word in self.prep_list) and cond
+
+        if cond:
+            prep_pos = parent_words[::-1].index(child_fst_word)
+            # remove tail part of parent node starts with the same preprosition
+            parent_words = parent_words[:-(prep_pos+1)]
+            child_node = " ".join(parent_words + [child_node])
+        else:
+            child_node = " ".join([parent_node, child_node])
+        return child_node
         
     def _split(self, title: str) -> dict:
         res_forest = {}
@@ -84,14 +99,7 @@ class Parser:
                     try:
                         fst_word = eg_c.split()[0].lower()
                         if fst_word in self.prep_list or eg_p.split()[-1].lower() in self.prep_list: 
-                            parent_words = eg_p.lower().split()
-                            if fst_word in self.prep_list and fst_word in parent_words:
-                                prep_pos = parent_words[::-1].index(fst_word)
-                                # remove tail part of parent node starts with the same preprosition
-                                parent_words = parent_words[:-(prep_pos+1)]
-                                eg_c = " ".join(parent_words + [eg_c])
-                            else:
-                                eg_c = " ".join([eg_p, eg_c])
+                            eg_c = self._attach_to_parent(eg_p, eg_c, fst_word)
                         else:
                             eg_c = eg_c.capitalize()
                         res_forest[t].children = [Node(eg_c)]
@@ -110,16 +118,8 @@ class Parser:
                         # if the first word of example or the final word of head is a preprosition, concatename their names
                         fst_word = eg_c.split()[0].lower()
                         
-                        if fst_word in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:  
-                            parent_words = eg_list[i-1].lower().split()
-         
-                            if fst_word in self.prep_list and fst_word in parent_words:
-                                prep_pos = parent_words[::-1].index(fst_word)
-                                # remove tail part of parent node starts with the same preprosition
-                                parent_words = parent_words[:-(prep_pos+1)]
-                                eg_c = " ".join(parent_words + [eg_c])
-                            else:
-                                eg_c = " ".join([eg_list[i-1], eg_c])  
+                        if fst_word in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:
+                            eg_c = self._attach_to_parent(eg_list[i-1], eg_c, fst_word)
                         else:
                             eg_c = eg_c.capitalize()               
                         node_2_add = Node(eg_c)
@@ -170,7 +170,8 @@ class Parser:
 
             # if the first character of children node is in lower case, then concatenate with parent node
             if c.name[0].islower(): 
-                c.name = " ".join([p_name,c.name])
+                # c.name = " ".join([p_name,c.name])
+                c.name = self._attach_to_parent(p_name, c.name, c.name.split()[0], for_eg= False)
 
                 c_siblings = list(copy.deepcopy(c.children))
                 if c_siblings:
@@ -178,7 +179,8 @@ class Parser:
                         sib = copy.deepcopy(c_siblings[j])
                         if sib.name[0].islower():                                                
                             sib.parent.name = c.name
-                            sib.name = " ".join([p_name, sib.name])
+                            # sib.name = " ".join([p_name, sib.name])
+                            sib.name = self._attach_to_parent(p_name, sib.name, sib.name.split()[0], for_eg= False)
                             c_siblings[j] = sib
                     c.childern = [] #TODO zy: no idea why it works :)
                     c.children = c_siblings
