@@ -29,7 +29,7 @@ def clean_descr(description):
     description = description.replace('{', '').replace('}','')
     description = re.sub(r'\ ?\([\w\W]*([A-Z]{1}[0-9]{2}[A-Z]{1}[0-9]*[\/]*[0-9]*)*[\w\W]*\)', '', description)
     description = re.sub(r'[ ,]*i\.e\..*', '', description)
-    description = re.sub('as specified in the subgroups and ','', description)
+    description = re.sub('as specified in the subgroups? and ','', description)
     return description
 
 def has_cpc(description):
@@ -94,8 +94,8 @@ def read_label_file(file_name, max_level=TARGET_LEVEL):
 
     if max_level in [1,3,4,6]:
         df = df[df['lvl']<=dict_lvl[max_level]]
-    elif max_level == 8:
-        df = df[df['lvl']<= 1 ] # limit the deepest level to 5, or it will be toooo slow
+    #elif max_level == 8:
+    #    df = df[df['lvl']<= 1] # limit the deepest level to 5, or it will be toooo slow
 
     df['description'] = df['description'].apply(clean_descr)
     df = rm_title_with_subtree(df)

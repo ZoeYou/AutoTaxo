@@ -9,7 +9,7 @@ import multiprocessing, pickle
 
 CREATE_CSV = True
 PRINT_TREE = True
-OUTPUT_DIR = "trees_CPC8-1"
+OUTPUT_DIR = "trees"
 
 def save_tree(root_node, file_name):
     file_to_store = open(file_name, "wb")
@@ -30,8 +30,6 @@ def get_root_node(file):
     print(f"{name} done!")
     return res_root, name 
 
-def term_hypo(node):
-    pass
 
 if __name__ == '__main__':
     # read tree files
@@ -57,12 +55,16 @@ if __name__ == '__main__':
                         out_f.write("\n")
 
     if CREATE_CSV:
+        for f in tree_files:
+            res_root = load_tree(f)
+            dict_trees[str(f).split(".")[0].split("/")[-1]] = res_root
+
         with open("hH.csv", "w", newline='') as csv_f:
             writer = csv.writer(csv_f, delimiter="\t", quoting=csv.QUOTE_MINIMAL)
             for f, root_node in dict_trees.items():
                 # save term-hyponym pairs into csv file
                 nodes = [node for node in PreOrderIter(root_node)]
                 
-                for node in tqdm(nodes[2:]):
+                for node in nodes[2:]:
                     writer.writerow([f, node.name, node.parent.name])
             

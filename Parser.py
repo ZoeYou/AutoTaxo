@@ -8,15 +8,13 @@ class Parser:
     """
     Basic parser for spliting cpc titles into its taxonomy structure.
     """
-    def __init__(self, prepositions_file='prep_en.txt'):
+    def __init__(self, prepositions_file='prep_en.txt', synonym_file='synonyms.txt'):
         self.prep_file = prepositions_file
+        self.synonym_outpath = synonym_file
         self.prep_list = open(self.prep_file, 'r').read().splitlines()
-        self.there_dict = {"thereof": "of",
-                           "therefor": "for",
-                           "therefore": "for",
-                           "therewith": "with"}
+        self.there_dict = {"thereof": "of", "therefor": "for", "therefore": "for", "therewith": "with", "therein": "in"}
 
-    def filter(self, title: str) -> bool:
+    def _filter(self, title: str) -> bool:
         if "their" in title:
             return True
 
@@ -36,19 +34,42 @@ class Parser:
                         return True
                 else:
                     return False
+
+    def _get_syns_in_brackets(self, title: str) -> str:
+        #Remove "[" "]"" from title and save synonyms (e.g. [SVM] and Support Vector Machine) 
+        in_brackets = [e for e in re.finditer(r"(\[\S*\]),?;?", title)]
+        if in_brackets:
+            title_words = title.split(" ")
+            for match in in_brackets:
+                #Checking that the match is not a chemistry component: -N[O]-N= ("[" and "]" have spaces on the left/ right sides)
+                if match.group() in title_words:
+                    if match.group()[-1] == ";":
+                        title_words[title_words.index(match.group())-1] = title_words[title_words.index(match.group())-1] + ";"
+                    if match.group()[-1] == ",":
+                        title_words[title_words.index(match.group())-1] = title_words[title_words.index(match.group())-1] + ","
+                    title_words.remove(match.group())
+                    with open(self.synonym_outpath, "a") as out_f:
+                        out_f.write(match.group().strip(" ,") + "\n")
+            title = " ".join(title_words)
+        return title
+
         
-    def split(self, title: str) -> dict:
+    def _split(self, title: str) -> dict:
         res_forest = {}
 
-        # remove "not otherwise provided for" from title
-        title = re.sub(r"[ ,]?not otherwise provided for[, ]?", "", title, flags=re.IGNORECASE)
+        # remove "reference" patterns from title
+        title = re.sub(r"[ ,]?(not otherwise provided for|general aspects or details|(referred to|as defined|covered) in the subgroups)[, ]?", "", title, flags=re.IGNORECASE)
+
+        # remove abbreviations inside "[" and "]"
+        title = self._get_syns_in_brackets(title)
 
         # 1. split by semicolon
         titles = title.split(";")
+        sub_pattern = r"[ ,]?(in general|or the like|or other parts|not provided for elsewhere|specified in the subgroup)$"
         for t in titles:
-            t = re.sub(r"[ ,]?(in general| or the like)$", "", t.strip(", "), flags=re.IGNORECASE).strip(", ") # remove "in general" or "all the like" at the end of the title
-            # filter titles having "their" inside
-            if self.filter(t):
+            t = re.sub(sub_pattern, "", t.strip(", "), flags=re.IGNORECASE).strip(", ") # remove "in general" or "all the like" at the end of the title
+            # remove titles with Pronouns such as "such", "their"
+            if self._filter(t):
                 continue
             res_forest[t] = Node(t)
 
@@ -56,14 +77,21 @@ class Parser:
             if "e.g." in t:
                 try:
                     eg_p, eg_c = t.split('e.g.')
-                    eg_p = re.sub(r"[ ,]?(in general| or the like)$", "", eg_p.strip(", "), flags=re.IGNORECASE)
-                    eg_c = re.sub(r"[ ,]?(in general| or the like)$", "", eg_c.strip(", "), flags=re.IGNORECASE)
+                    eg_p = re.sub(sub_pattern, "", eg_p.strip(", "), flags=re.IGNORECASE)
+                    eg_c = re.sub(sub_pattern, "", eg_c.strip(", "), flags=re.IGNORECASE)
                     res_forest[t] = Node(eg_p)
-
                     # if the first word of example or the final word of main description is a preprosition, concatename them
                     try:
-                        if eg_c.split()[0].lower() in self.prep_list or eg_p.split()[-1].lower() in self.prep_list:   
-                            eg_c = " ".join([eg_p, eg_c])
+                        fst_word = eg_c.split()[0].lower()
+                        if fst_word in self.prep_list or eg_p.split()[-1].lower() in self.prep_list: 
+                            parent_words = eg_p.lower().split()
+                            if fst_word in self.prep_list and fst_word in parent_words:
+                                prep_pos = parent_words[::-1].index(fst_word)
+                                # remove tail part of parent node starts with the same preprosition
+                                parent_words = parent_words[:-(prep_pos+1)]
+                                eg_c = " ".join(parent_words + [eg_c])
+                            else:
+                                eg_c = " ".join([eg_p, eg_c])
                         else:
                             eg_c = eg_c.capitalize()
                         res_forest[t].children = [Node(eg_c)]
@@ -72,7 +100,7 @@ class Parser:
 
                 except ValueError: # more than one "e.g." in the title
                     eg_list = [eg.strip(", ") for eg in t.split('e.g.')]
-                    eg_list = [re.sub(r"[ ,]?(in general| or the like)$", "", eg, flags=re.IGNORECASE) for eg in eg_list]
+                    eg_list = [re.sub(sub_pattern, "", eg, flags=re.IGNORECASE) for eg in eg_list]
                     eg_p = eg_list[0]
 
                     res_forest[t] = Node(eg_p)
@@ -80,8 +108,18 @@ class Parser:
                     for i in range(1, len(eg_list))[::-1]:
                         eg_c = eg_list[i] 
                         # if the first word of example or the final word of head is a preprosition, concatename their names
-                        if eg_c.split()[0].lower() in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:   
-                            eg_c = " ".join([eg_list[i-1], eg_c])  
+                        fst_word = eg_c.split()[0].lower()
+                        
+                        if fst_word in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:  
+                            parent_words = eg_list[i-1].lower().split()
+         
+                            if fst_word in self.prep_list and fst_word in parent_words:
+                                prep_pos = parent_words[::-1].index(fst_word)
+                                # remove tail part of parent node starts with the same preprosition
+                                parent_words = parent_words[:-(prep_pos+1)]
+                                eg_c = " ".join(parent_words + [eg_c])
+                            else:
+                                eg_c = " ".join([eg_list[i-1], eg_c])  
                         else:
                             eg_c = eg_c.capitalize()               
                         node_2_add = Node(eg_c)
@@ -93,7 +131,7 @@ class Parser:
                     res_forest[t].children = [Node_list[-1]]
         return res_forest
 
-    def valide(self, p_node: str, c_nodes: list) -> list:
+    def _valide(self, p_node: str, c_nodes: list) -> list:
         """
         1. check whether children nodes have the same title as parent title, if true remove the title in children nodes
         2. check whether children nodes have repeated titles among each other, if true combine their sibling nodes
@@ -118,7 +156,6 @@ class Parser:
         c_nodes = list(dict_name_siblings.values())
 
         # titles end with therefor etc. concatenate its parent node to it (if too long just ignore and remove the last word)
-        # nodes_to_remove = []
         for i in range(len(c_nodes)): 
             c = c_nodes[i]
             words_list = c.name.strip().split()          
@@ -148,7 +185,7 @@ class Parser:
             c_nodes[i] = c
         return c_nodes
 
-    def update_child_layer(self, p_node: Node, c_nodes: list, clean_p: bool) -> Node:
+    def _update_child_layer(self, p_node: Node, c_nodes: list, clean_p: bool) -> Node:
         """
         concatenate a parent node and its children nodes (childnode could be a tree depends on the results of splitting)
         """
@@ -177,7 +214,7 @@ class Parser:
         
         print(f"Creating taxonomy tree for {root_name} ...")
         for node in tqdm(nodes_to_search):
-            c_layer = list(self.split(node.name).values()) # returns a list of Nodes after splitting
+            c_layer = list(self._split(node.name).values()) # returns a list of Nodes after splitting
 
             # preprocessing for titles with "therefor" "thereof" etc.
             nodes_to_remove = []
@@ -205,7 +242,7 @@ class Parser:
             if node.name + str(node.depth) in saved_nodes:
                 siblings = saved_nodes[node.name + str(node.depth)] # a list of children nodes of current node
                 for c in c_layer:
-                    c.children = self.valide(c, copy.deepcopy(c.children) + copy.deepcopy(siblings.children))
+                    c.children = self._valide(c, copy.deepcopy(c.children) + copy.deepcopy(siblings.children))
 
             p_node = copy.deepcopy(node.parent)
             if p_node:
@@ -214,13 +251,12 @@ class Parser:
                     p_node = saved_nodes[p_node.name + str(p_node.depth)]
                 else:
                     new_p = True
-                p_v = self.update_child_layer(p_node, c_layer, clean_p = new_p)
+                p_v = self._update_child_layer(p_node, c_layer, clean_p = new_p)
 
                 # update parent node in result dictionary
                 saved_nodes[p_node.name+str(p_node.depth)] = p_v
             else:
                 top_layer.extend(c_layer)
-                #top_layer.append(saved_nodes[node.name + str(node.depth)])
             
         res_root.children = copy.deepcopy(top_layer)
         return res_root
