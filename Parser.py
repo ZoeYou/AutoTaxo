@@ -53,7 +53,7 @@ class Parser:
             title = " ".join(title_words)
         return title
 
-    def _attach_to_parent(self, parent_node: str, child_node: str, child_fst_word: str, for_eg: str = True) -> str:
+    def _attach_to_parent(self, parent_node: str, child_node: str, child_fst_word: str, for_eg: bool = True) -> str:
         parent_words = parent_node.lower().split()
 
         cond = child_fst_word in parent_words
