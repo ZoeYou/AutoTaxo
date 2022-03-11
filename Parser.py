@@ -49,7 +49,7 @@ class Parser:
                         title_words[title_words.index(match.group())-1] = title_words[title_words.index(match.group())-1] + ","
                     title_words.remove(match.group())
                     with open(self.synonym_outpath, "a") as out_f:
-                        out_f.write(match.group().strip(" ,") + "\n")
+                        out_f.write(title + "\t" + match.group().strip(" ,") + "\n")
             title = " ".join(title_words)
         return title
 
@@ -68,7 +68,50 @@ class Parser:
         else:
             child_node = " ".join([parent_node, child_node])
         return child_node
-        
+
+    def _split_eg(self, title: str, substitution_patterns: str) -> Node:
+        try:
+            eg_p, eg_c = title.split('e.g.')
+            eg_p = re.sub(substitution_patterns, "", eg_p.strip(", "), flags=re.IGNORECASE)
+            eg_c = re.sub(substitution_patterns, "", eg_c.strip(", "), flags=re.IGNORECASE)
+            eg_p_node = Node(eg_p)
+            # if the first word of example or the final word of main description is a preprosition, concatename them
+            try:
+                fst_word = eg_c.split()[0].lower()
+                if fst_word in self.prep_list or eg_p.split()[-1].lower() in self.prep_list: 
+                    eg_c = self._attach_to_parent(eg_p, eg_c, fst_word)
+                else:
+                    eg_c = eg_c.capitalize()
+                eg_p_node.children = [Node(eg_c)]
+            except IndexError:
+                    pass   # child node without content
+
+        except ValueError: # more than one "e.g." in the title
+            eg_list = [eg.strip(", ") for eg in title.split('e.g.')]
+            eg_list = [re.sub(substitution_patterns, "", eg, flags=re.IGNORECASE) for eg in eg_list]
+            eg_p = eg_list[0]
+            eg_p_node = Node(eg_p)
+
+            Node_list = []                    
+            for i in range(1, len(eg_list))[::-1]:
+                eg_c = eg_list[i] 
+                # if the first word of example or the final word of head is a preprosition, concatename their names
+                fst_word = eg_c.split()[0].lower()
+                
+                if fst_word in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:
+                    eg_c = self._attach_to_parent(eg_list[i-1], eg_c, fst_word)
+                else:
+                    eg_c = eg_c.capitalize()               
+                node_2_add = Node(eg_c)
+                try:
+                    node_2_add.children = [Node_list[-1]]
+                except IndexError:
+                    pass
+                Node_list.append(node_2_add)
+            eg_p_node.children = [Node_list[-1]]
+        return eg_p_node
+
+
     def _split(self, title: str) -> dict:
         res_forest = {}
 
@@ -80,80 +123,70 @@ class Parser:
 
         # 1. split by semicolon
         titles = title.split(";")
-        sub_pattern = r"[ ,]?(in general|or the like|or other parts|not provided for elsewhere|specified in the subgroup)$"
+        sub_pattern = r"[ ,]?((in general|or the like|or other parts|not provided for elsewhere|specified in the subgroup)$|i\.e\..*)"
+        match_pattern_head = r"^Other "
+
         for t in titles:
             t = re.sub(sub_pattern, "", t.strip(", "), flags=re.IGNORECASE).strip(", ") # remove "in general" or "all the like" at the end of the title
-            # remove titles with Pronouns such as "such", "their"
+            if re.match(match_pattern_head, t):
+                t = re.sub(match_pattern_head,"",t).capitalize() # remove "Other" at the beginning of the title
+            # remove titles with Pronouns like "such", "their"
             if self._filter(t):
                 continue
             res_forest[t] = Node(t)
 
-        # 2. split by e.g.
-            if "e.g." in t:
+        # 2. split by "such as"
+            if " such as " in t:
+                sa_p, sa_c = t.split(" such as ")
+                sa_p = re.sub(sub_pattern, "", sa_p.strip(", "), flags=re.IGNORECASE)
+                sa_c = re.sub(sub_pattern, "", sa_c.strip(", "), flags=re.IGNORECASE)
+                sa_p_node = Node(sa_p)
+                if "e.g." in sa_p_node.name:
+                    sa_p_node = self._split_eg(sa_p_node.name, sub_pattern)
+                # if the first word of example or the final word of main description is a preprosition, concatename them
                 try:
-                    eg_p, eg_c = t.split('e.g.')
-                    eg_p = re.sub(sub_pattern, "", eg_p.strip(", "), flags=re.IGNORECASE)
-                    eg_c = re.sub(sub_pattern, "", eg_c.strip(", "), flags=re.IGNORECASE)
-                    res_forest[t] = Node(eg_p)
-                    # if the first word of example or the final word of main description is a preprosition, concatename them
-                    try:
-                        fst_word = eg_c.split()[0].lower()
-                        if fst_word in self.prep_list or eg_p.split()[-1].lower() in self.prep_list: 
-                            eg_c = self._attach_to_parent(eg_p, eg_c, fst_word)
-                        else:
-                            eg_c = eg_c.capitalize()
-                        res_forest[t].children = [Node(eg_c)]
-                    except IndexError:
-                         continue   # child node without content
+                    fst_word = sa_c.split()[0].lower()
+                    if fst_word in self.prep_list or sa_p.split()[-1].lower() in self.prep_list: 
+                        sa_c = self._attach_to_parent(sa_p, sa_c, fst_word)
+                    else:
+                        sa_c = sa_c.capitalize()
+                    # check if it has "e.g." in the title of child node
+                    sa_c_node = Node(sa_c)
+                    if "e.g." in sa_c_node.name:
+                        sa_c_node = self._split_eg(sa_c_node.name, sub_pattern)
+                    sa_p_node.children.extend([sa_c_node])
+                    res_forest[t] = sa_p_node
+                except IndexError:
+                        pass   # child node without content              
 
-                except ValueError: # more than one "e.g." in the title
-                    eg_list = [eg.strip(", ") for eg in t.split('e.g.')]
-                    eg_list = [re.sub(sub_pattern, "", eg, flags=re.IGNORECASE) for eg in eg_list]
-                    eg_p = eg_list[0]
-
-                    res_forest[t] = Node(eg_p)
-                    Node_list = []                    
-                    for i in range(1, len(eg_list))[::-1]:
-                        eg_c = eg_list[i] 
-                        # if the first word of example or the final word of head is a preprosition, concatename their names
-                        fst_word = eg_c.split()[0].lower()
-                        
-                        if fst_word in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:
-                            eg_c = self._attach_to_parent(eg_list[i-1], eg_c, fst_word)
-                        else:
-                            eg_c = eg_c.capitalize()               
-                        node_2_add = Node(eg_c)
-                        try:
-                            node_2_add.children = [Node_list[-1]]
-                        except IndexError:
-                            pass
-                        Node_list.append(node_2_add)
-                    res_forest[t].children = [Node_list[-1]]
+        # 3. split by "e.g." with "such as"
+            if "e.g." in t:
+                res_forest[t] = self._split_eg(t, sub_pattern)         
         return res_forest
 
     def _check(self, p_node: str, c_nodes: list) -> list:
         """
         1. check whether children nodes have the same title as parent title, if true remove the title in children nodes
-        2. check whether children nodes have repeated titles among each other, if true combine their sibling nodes
+        2. check whether children nodes have repeated titles among each other, if true combine their descendants nodes
         3. check if children nodes are ended with "thereof", "therefor"/"therefore" and "therewith" (without "or" also in the title), if true remove them
         """
         p_name = p_node.name
         c_nodes = [c for c in c_nodes if c.name != p_name]
 
-        dict_name_siblings = defaultdict(list)  # values of dictinary are lists of Nodes
+        dict_name_descendants = defaultdict(list)  # values of dictinary are lists of Nodes
         for c in c_nodes:
-            dict_name_siblings[c.name].append(c)
+            dict_name_descendants[c.name].append(c)
         
         # remove duplication children nodes
-        for k,v in dict_name_siblings.items():
+        for k,v in dict_name_descendants.items():
             head_node = v[0]
             if len(v) > 1:   
                 head_children = list(copy.deepcopy(head_node.children))
                 for other_node in v[1:]:
                     head_children.extend(list(copy.deepcopy(other_node.children)))
                 head_node.children = head_children
-            dict_name_siblings[k] = head_node
-        c_nodes = list(dict_name_siblings.values())
+            dict_name_descendants[k] = head_node
+        c_nodes = list(dict_name_descendants.values())
 
         # titles end with therefor etc. concatenate its parent node to it (if too long just ignore and remove the last word)
         for i in range(len(c_nodes)): 
@@ -173,17 +206,16 @@ class Parser:
                 # c.name = " ".join([p_name,c.name])
                 c.name = self._attach_to_parent(p_name, c.name, c.name.split()[0], for_eg= False)
 
-                c_siblings = list(copy.deepcopy(c.children))
-                if c_siblings:
-                    for j in range(len(c_siblings)):
-                        sib = copy.deepcopy(c_siblings[j])
-                        if sib.name[0].islower():                                                
-                            sib.parent.name = c.name
-                            # sib.name = " ".join([p_name, sib.name])
-                            sib.name = self._attach_to_parent(p_name, sib.name, sib.name.split()[0], for_eg= False)
-                            c_siblings[j] = sib
+                c_descendants = list(copy.deepcopy(c.children))
+                if c_descendants:
+                    for j in range(len(c_descendants)):
+                        des = copy.deepcopy(c_descendants[j])
+                        if des.name[0].islower():                                                
+                            des.parent.name = c.name
+                            des.name = self._attach_to_parent(p_name, des.name, des.name.split()[0], for_eg= False)
+                            c_descendants[j] = des
                     c.childern = [] #TODO zy: no idea why it works :)
-                    c.children = c_siblings
+                    c.children = c_descendants
             c_nodes[i] = c
         return c_nodes
 
@@ -212,14 +244,17 @@ class Parser:
             fst_word = node.name.split()[0]
             if node.name[0].islower() and fst_word in node.parent.name and fst_word != node.parent.name.lower().split()[0]:
                 node.name = self._attach_to_parent(node.parent.name, node.name, fst_word, for_eg = False)
+
+            # check if there is words such as "thereof", "therefor", "therewith" etc. in the title
+            
         return root_node
            
 
-    def get_taxonomy(self, root_node: str, root_name: str) -> Node:
+    def get_taxonomy(self, root_node: Node, root_name: str) -> Node:
         # create new root node 
         res_root = Node(root_name)
 
-        # all nodes in post order 
+        # all nodes in post order ()
         nodes_to_search = [node for node in PostOrderIter(root_node)]
         
         saved_nodes = {}
@@ -239,7 +274,7 @@ class Parser:
                     last_word = words_list[-1].lower()
                 except IndexError:
                         continue
-                if last_word in self.there_dict.keys() and (not (" or parts thereof" in c.name or " OR PARTS THEREOF" in c.name)):
+                if last_word in self.there_dict and (not (" or parts thereof" in c.name or " OR PARTS THEREOF" in c.name)):
                     if len(c_layer) > 1:
                         # concatenate the content of current node with its previous brother node if possible
                         brother_name = c_layer[i-1].name
@@ -255,9 +290,9 @@ class Parser:
                 
             # if current node has children nodes already updated
             if node.name + str(node.depth) in saved_nodes:
-                siblings = saved_nodes[node.name + str(node.depth)] # a list of children nodes of current node
+                descendants = saved_nodes[node.name + str(node.depth)] # a list of children nodes of current node
                 for c in c_layer:
-                    c.children = self._check(c, copy.deepcopy(c.children) + copy.deepcopy(siblings.children))
+                    c.children = self._check(c, copy.deepcopy(c.children) + copy.deepcopy(descendants.children))
 
             p_node = copy.deepcopy(node.parent)
             if p_node:

@@ -24,11 +24,9 @@ def clean_descr(description):
     """
     1. remove references from the description, such as *** (preserving A23B; obtaining protein compositions for foodstuffs A23J1/00;)
     2. remove '{' and '}'
-    3. remove i.e. ***
     """
     description = description.replace('{', '').replace('}','')
     description = re.sub(r'\ ?\([\w\W]*([A-Z]{1}[0-9]{2}[A-Z]{1}[0-9]*[\/]*[0-9]*)*[\w\W]*\)', '', description)
-    description = re.sub(r'[ ,]*i\.e\..*', '', description)
     description = re.sub('as specified in the subgroups? and ','', description)
     return description
 

@@ -4,7 +4,6 @@ import csv
 from preprocessing import *
 
 from pathlib import Path
-from tqdm import tqdm
 import multiprocessing, pickle
 
 CREATE_CSV = True
@@ -35,12 +34,8 @@ if __name__ == '__main__':
     # read tree files
     output_path = Path(OUTPUT_DIR)
     tree_files = sorted([str(f) for f in output_path.glob("*.pickle")])
-    if len(tree_files) == 9:
-        dict_trees = {}
-        for f in tree_files:
-            res_root = load_tree(f)
-            dict_trees[str(f).split(".")[0].split("/")[-1]] = res_root
-    else:
+    dict_trees = {}
+    if len(tree_files) != 9:  
         files_list = [str(f) for f in Path("cpc-titles").glob("*.txt")]
         parser = Parser.Parser()
         pool = multiprocessing.Pool(36)
