@@ -154,7 +154,7 @@ class Parser:
                     sa_c_node = Node(sa_c)
                     if "e.g." in sa_c_node.name:
                         sa_c_node = self._split_eg(sa_c_node.name, sub_pattern)
-                    sa_p_node.children.extend([sa_c_node])
+                    sa_p_node.children = list(copy.deepcopy(sa_p_node.children)) + [sa_c_node]
                     res_forest[t] = sa_p_node
                 except IndexError:
                         pass   # child node without content              
