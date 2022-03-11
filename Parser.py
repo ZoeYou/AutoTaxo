@@ -1,5 +1,5 @@
 from xml.dom.minicompat import NodeList
-from anytree import Node, PostOrderIter
+from anytree import Node, PostOrderIter, PreOrderIter
 from collections import defaultdict
 from tqdm import tqdm
 import re, copy
@@ -61,9 +61,9 @@ class Parser:
             cond = (child_fst_word in self.prep_list) and cond
 
         if cond:
-            prep_pos = parent_words[::-1].index(child_fst_word)
+            pos = parent_words[::-1].index(child_fst_word)
             # remove tail part of parent node starts with the same preprosition
-            parent_words = parent_words[:-(prep_pos+1)]
+            parent_words = parent_words[:-(pos+1)]
             child_node = " ".join(parent_words + [child_node])
         else:
             child_node = " ".join([parent_node, child_node])
@@ -131,7 +131,7 @@ class Parser:
                     res_forest[t].children = [Node_list[-1]]
         return res_forest
 
-    def _valide(self, p_node: str, c_nodes: list) -> list:
+    def _check(self, p_node: str, c_nodes: list) -> list:
         """
         1. check whether children nodes have the same title as parent title, if true remove the title in children nodes
         2. check whether children nodes have repeated titles among each other, if true combine their sibling nodes
@@ -202,7 +202,18 @@ class Parser:
         
         children_list.extend(c_nodes)                   
         p_node.children = children_list
-        return p_node        
+        return p_node 
+
+    def _valide(self, root_node: str) -> Node:
+        # all nodes in pre order 
+        nodes_to_search = [node for node in PreOrderIter(root_node)][1:]
+        for node in nodes_to_search:
+            # check if node starts with lower case
+            fst_word = node.name.split()[0]
+            if node.name[0].islower() and fst_word in node.parent.name and fst_word != node.parent.name.lower().split()[0]:
+                node.name = self._attach_to_parent(node.parent.name, node.name, fst_word, for_eg = False)
+        return root_node
+           
 
     def get_taxonomy(self, root_node: str, root_name: str) -> Node:
         # create new root node 
@@ -232,19 +243,21 @@ class Parser:
                     if len(c_layer) > 1:
                         # concatenate the content of current node with its previous brother node if possible
                         brother_name = c_layer[i-1].name
-                        brother_lasw = brother_name.split()[-1].lower()
-                        if len(words_list) < 5 and len(brother_name.split()) < 5 and not (brother_lasw in self.there_dict.keys()):
-                            c.name = " ".join(words_list[:-1] + [self.there_dict[last_word]] + brother_name.lower().split())
-                            c_layer[i] = c 
-                        else:
-                            nodes_to_remove.append(c)
+                        if brother_name:
+                            brother_lasw = brother_name.split()[-1].lower()
+
+                            if len(words_list) < 5 and len(brother_name.split()) < 5 and not (brother_lasw in self.there_dict.keys()):
+                                c.name = " ".join(words_list[:-1] + [self.there_dict[last_word]] + brother_name.lower().split())
+                                c_layer[i] = c 
+                            else:
+                                nodes_to_remove.append(c)
             c_layer = [c for c in c_layer if not (c in nodes_to_remove)]
                 
             # if current node has children nodes already updated
             if node.name + str(node.depth) in saved_nodes:
                 siblings = saved_nodes[node.name + str(node.depth)] # a list of children nodes of current node
                 for c in c_layer:
-                    c.children = self._valide(c, copy.deepcopy(c.children) + copy.deepcopy(siblings.children))
+                    c.children = self._check(c, copy.deepcopy(c.children) + copy.deepcopy(siblings.children))
 
             p_node = copy.deepcopy(node.parent)
             if p_node:
@@ -261,4 +274,7 @@ class Parser:
                 top_layer.extend(c_layer)
             
         res_root.children = copy.deepcopy(top_layer)
+
+        # to check the title connatenation from root node to leaf nodes
+        res_root = self._valide(res_root)
         return res_root
