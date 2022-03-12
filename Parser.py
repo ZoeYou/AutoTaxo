@@ -137,7 +137,7 @@ class Parser:
 
         # 2. split by "such as"
             if " such as " in t:
-                sa_p, sa_c = t.split(" such as ")
+                sa_p, sa_c = t.split(" such as ")[:2]
                 sa_p = re.sub(sub_pattern, "", sa_p.strip(", "), flags=re.IGNORECASE)
                 sa_c = re.sub(sub_pattern, "", sa_c.strip(", "), flags=re.IGNORECASE)
                 sa_p_node = Node(sa_p)
@@ -153,13 +153,13 @@ class Parser:
                     # check if it has "e.g." in the title of child node
                     sa_c_node = Node(sa_c)
                     if "e.g." in sa_c_node.name:
-                        sa_c_node = self._split_eg(sa_c_node.name, sub_pattern)
+                        sa_c_node = copy.deepcopy(self._split_eg(sa_c_node.name, sub_pattern))
                     sa_p_node.children = list(copy.deepcopy(sa_p_node.children)) + [sa_c_node]
                     res_forest[t] = sa_p_node
                 except IndexError:
-                        pass   # child node without content              
+                        pass   # child node without content            
 
-        # 3. split by "e.g." with "such as"
+        # 3. split by "e.g." without "such as"
             if "e.g." in t:
                 res_forest[t] = self._split_eg(t, sub_pattern)         
         return res_forest
@@ -245,7 +245,16 @@ class Parser:
             if node.name[0].islower() and fst_word in node.parent.name and fst_word != node.parent.name.lower().split()[0]:
                 node.name = self._attach_to_parent(node.parent.name, node.name, fst_word, for_eg = False)
 
-            # check if there is words such as "thereof", "therefor", "therewith" etc. in the title
+            # check if there is words such as "thereof", "therefor", "therewith" etc. in the title 
+            #TODO
+
+            # check if there is "such as" in the title
+            if " such as " in node.name:
+                sa_p, sa_c = node.name.split(" such as ")
+                sa_p =  sa_p.strip(", ")
+                sa_c =  sa_c.strip(", ")
+                node.name = sa_p
+                node.children = list(copy.deepcopy(node.children)) + [Node(sa_c)]
             
         return root_node
            

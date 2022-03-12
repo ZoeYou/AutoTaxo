@@ -47,7 +47,7 @@ def is_trash_title(description):
     5. check whether a title description is a trash title
     """
     description = description.lower()
-    if ("subject matter not" in description and "provided for in" in description) or ("covered by" in description and (" subclass " in description or " groups " in description) and " other " in description) or ("dummy group" in description):
+    if ("subject matter not" in description and "provided for in" in description) or ("covered by" in description and (" subclass" in description or " group" in description)) or ("dummy group" in description):
         return True
     else:
         return False
