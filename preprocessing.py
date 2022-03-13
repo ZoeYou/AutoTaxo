@@ -92,14 +92,15 @@ def rm_Details_of(dataframe):
     """
     id_Details_of = dataframe[dataframe['description'].apply(lambda x: "Details of " == x[:11])].index
 
+    idx_to_drop = []
     for i in id_Details_of:
         l = dataframe.iloc[i]
         j = next_same_lvl_index(dataframe[i:], l['lvl'])  
-        if i==j:
-            j += 1
+        if i==j:j += 1
         dataframe.loc[i:j,'lvl'] = dataframe.loc[i:j,'lvl'].apply(lambda x: x-1)
-        dataframe.loc[i, 'description'] = None
+        idx_to_drop.append(i)
 
+    dataframe = dataframe.drop(idx_to_drop)
     return dataframe
 
 def read_label_file(file_name, max_level=TARGET_LEVEL):
@@ -108,8 +109,6 @@ def read_label_file(file_name, max_level=TARGET_LEVEL):
 
     if max_level in [1,3,4,6]:
         df = df[df['lvl']<=dict_lvl[max_level]]
-    #elif max_level == 8:
-    #    df = df[df['lvl']<= 1] # limit the deepest level to 5, or it will be toooo slow
 
     df['description'] = df['description'].apply(clean_descr)
     df = rm_title_with_subtree(df)
