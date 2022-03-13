@@ -249,7 +249,7 @@ class Parser:
             #TODO
 
             # remove "other than .*" at the end of title
-            node.name = re.sub(r"other than .*", "", flags=re.IGNORECASE).strip(", ")
+            node.name = re.sub(r"other than .*", "", node.name, flags=re.IGNORECASE).strip(", ")
 
             # check if there is "such as" in the title
             if " such as " in node.name:
@@ -257,7 +257,13 @@ class Parser:
                 sa_p =  sa_p.strip(", ")
                 sa_c =  sa_c.strip(", ")
                 node.name = sa_p
-                node.children = list(copy.deepcopy(node.children)) + [Node(sa_c)]     
+                node.children = list(copy.deepcopy(node.children)) + [Node(sa_c)]    
+
+            # check if node starts with "Details"
+            if node.name[:7].lower() == "details":
+                node.parent.children = node.children
+                for c_node in node.children:
+                    c_node.parent = node.parent
         return root_node
            
 

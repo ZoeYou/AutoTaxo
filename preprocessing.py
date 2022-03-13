@@ -86,14 +86,14 @@ def rm_title_with_subtree(dataframe):
     dataframe = dataframe.drop(idx_to_drop)
     return dataframe.reset_index(drop=True)
 
-def rm_Details_of(dataframe):
+def rm_Details(dataframe):
     """
-    Remove content of titles starts with "Details of", and upgrade the level of its children titles
+    Remove content of titles starts with "Details", and upgrade the level of its children titles
     """
-    id_Details_of = dataframe[dataframe['description'].apply(lambda x: "Details of " == x[:11])].index
+    id_Details = dataframe[dataframe['description'].apply(lambda x: "Details" == x[:7])].index
 
     idx_to_drop = []
-    for i in id_Details_of:
+    for i in id_Details:
         l = dataframe.iloc[i]
         j = next_same_lvl_index(dataframe[i:], l['lvl'])  
         if i==j:j += 1
@@ -101,7 +101,7 @@ def rm_Details_of(dataframe):
         idx_to_drop.append(i)
 
     dataframe = dataframe.drop(idx_to_drop)
-    return dataframe
+    return dataframe.reset_index(drop=True)
 
 def read_label_file(file_name, max_level=TARGET_LEVEL):
     df = pd.read_csv(file_name, header=None, sep='\t', dtype=object, names=['title', 'lvl', 'description'])
@@ -112,12 +112,12 @@ def read_label_file(file_name, max_level=TARGET_LEVEL):
 
     df['description'] = df['description'].apply(clean_descr)
     df = rm_title_with_subtree(df)
-    df = rm_Details_of(df)
+    df = rm_Details(df)
     return df.dropna().reset_index(drop=True)
 
-def find_father(df, child_lvl):
-    for i, row in df[::-1].iterrows():
-        if row.lvl + 1 == child_lvl:
+def find_father(df, child_lvl, diff=1):
+    for _, row in df[::-1].iterrows():
+        if row.lvl + diff == child_lvl:
             return row.title
 
 def build_tree(df):
@@ -130,7 +130,12 @@ def build_tree(df):
         child_lvl = row.lvl
         child_title = row.title
         child_desc = row.description
-
-        father_title = find_father(df[:i], child_lvl)
-        node_dict[child_title] = Node(child_desc, parent = node_dict[father_title])
+        try:
+            father_title = find_father(df[:i], child_lvl)
+            node_dict[child_title] = Node(child_desc, parent = node_dict[father_title])
+        except KeyError:
+            # father_title = find_father(df[:i], child_lvl, 2)    #TODO
+            # node_dict[child_title] = Node(child_desc, parent = node_dict[father_title])    
+            print(df[:i])
+            print(row)       
     return node_dict[root_title]
