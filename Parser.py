@@ -248,14 +248,16 @@ class Parser:
             # check if there is words such as "thereof", "therefor", "therewith" etc. in the title 
             #TODO
 
+            # remove "other than .*" at the end of title
+            node.name = re.sub(r"other than .*", "", flags=re.IGNORECASE).strip(", ")
+
             # check if there is "such as" in the title
             if " such as " in node.name:
                 sa_p, sa_c = node.name.split(" such as ")
                 sa_p =  sa_p.strip(", ")
                 sa_c =  sa_c.strip(", ")
                 node.name = sa_p
-                node.children = list(copy.deepcopy(node.children)) + [Node(sa_c)]
-            
+                node.children = list(copy.deepcopy(node.children)) + [Node(sa_c)]     
         return root_node
            
 

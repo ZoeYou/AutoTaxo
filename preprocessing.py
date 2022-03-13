@@ -53,7 +53,7 @@ def is_trash_title(description):
         return False
 
 def next_same_lvl_index(subdf,lvl):
-    lvl_df = subdf[subdf['lvl'] == lvl]
+    lvl_df = subdf[subdf['lvl'] <= lvl]
     idx_df = lvl_df.index
     if len(idx_df) == 1:
         return idx_df[0]
@@ -86,6 +86,22 @@ def rm_title_with_subtree(dataframe):
     dataframe = dataframe.drop(idx_to_drop)
     return dataframe.reset_index(drop=True)
 
+def rm_Details_of(dataframe):
+    """
+    Remove content of titles starts with "Details of", and upgrade the level of its children titles
+    """
+    id_Details_of = dataframe[dataframe['description'].apply(lambda x: "Details of " == x[:11])].index
+
+    for i in id_Details_of:
+        l = dataframe.iloc[i]
+        j = next_same_lvl_index(dataframe[i:], l['lvl'])  
+        if i==j:
+            j += 1
+        dataframe.loc[i:j,'lvl'] = dataframe.loc[i:j,'lvl'].apply(lambda x: x-1)
+        dataframe.loc[i, 'description'] = None
+
+    return dataframe
+
 def read_label_file(file_name, max_level=TARGET_LEVEL):
     df = pd.read_csv(file_name, header=None, sep='\t', dtype=object, names=['title', 'lvl', 'description'])
     df['lvl'] = df.apply(convert_to_int, axis=1)
@@ -97,6 +113,7 @@ def read_label_file(file_name, max_level=TARGET_LEVEL):
 
     df['description'] = df['description'].apply(clean_descr)
     df = rm_title_with_subtree(df)
+    df = rm_Details_of(df)
     return df.dropna().reset_index(drop=True)
 
 def find_father(df, child_lvl):
