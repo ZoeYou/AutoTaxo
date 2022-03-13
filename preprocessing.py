@@ -97,7 +97,7 @@ def rm_Details(dataframe):
         l = dataframe.iloc[i]
         j = next_same_lvl_index(dataframe[i:], l['lvl'])  
         if i==j:j += 1
-        dataframe.loc[i:j,'lvl'] = dataframe.loc[i:j,'lvl'].apply(lambda x: x-1)
+        dataframe.loc[i:j,'lvl'] = dataframe.loc[i:j,'lvl'].apply(lambda x: x-1)    # TODO need to remove those starts with lower case!
         idx_to_drop.append(i)
 
     dataframe = dataframe.drop(idx_to_drop)

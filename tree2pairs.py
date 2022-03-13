@@ -37,6 +37,9 @@ if __name__ == '__main__':
     dict_trees = {}
     if len(tree_files) != 9:  
         files_list = [str(f) for f in Path("cpc-titles").glob("*.txt")]
+        already_done = [f"cpc-titles/cpc-section-{str(f).split('/')[1].split('.')[0]}_20220201.txt" for f in Path(OUTPUT_DIR).glob("*.txt")]
+        files_list = list(set(files_list) - set(already_done))
+
         parser = Parser.Parser()
         pool = multiprocessing.Pool(36)
         for res_root, name in pool.imap_unordered(get_root_node, files_list):

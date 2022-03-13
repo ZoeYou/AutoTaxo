@@ -137,7 +137,7 @@ class Parser:
 
         # 2. split by "such as"
             if " such as " in t:
-                sa_p, sa_c = t.split(" such as ")[:2]
+                sa_p, sa_c = re.split(" such as | SUCH AS ", t, maxsplit=2)
                 sa_p = re.sub(sub_pattern, "", sa_p.strip(", "), flags=re.IGNORECASE)
                 sa_c = re.sub(sub_pattern, "", sa_c.strip(", "), flags=re.IGNORECASE)
                 sa_p_node = Node(sa_p)
@@ -261,9 +261,12 @@ class Parser:
 
             # check if node starts with "Details"
             if node.name[:7].lower() == "details":
-                node.parent.children = node.children
-                for c_node in node.children:
-                    c_node.parent = node.parent
+                try:
+                    node.parent.children = node.children
+                    for c_node in node.children:
+                        c_node.parent = node.parent
+                except AttributeError as e: #TODO
+                    print(e, node)
         return root_node
            
 
