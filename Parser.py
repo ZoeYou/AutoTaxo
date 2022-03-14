@@ -137,7 +137,7 @@ class Parser:
 
         # 2. split by "such as"
             if " such as " in t:
-                sa_p, sa_c = re.split(" such as | SUCH AS ", t, maxsplit=2)
+                sa_p, sa_c = re.split(" such as | SUCH AS ", t, maxsplit=1)
                 sa_p = re.sub(sub_pattern, "", sa_p.strip(", "), flags=re.IGNORECASE)
                 sa_c = re.sub(sub_pattern, "", sa_c.strip(", "), flags=re.IGNORECASE)
                 sa_p_node = Node(sa_p)
@@ -203,7 +203,6 @@ class Parser:
 
             # if the first character of children node is in lower case, then concatenate with parent node
             if c.name[0].islower(): 
-                # c.name = " ".join([p_name,c.name])
                 c.name = self._attach_to_parent(p_name, c.name, c.name.split()[0], for_eg= False)
 
                 c_descendants = list(copy.deepcopy(c.children))
@@ -214,7 +213,6 @@ class Parser:
                             des.parent.name = c.name
                             des.name = self._attach_to_parent(p_name, des.name, des.name.split()[0], for_eg= False)
                             c_descendants[j] = des
-                    c.childern = [] #TODO zy: no idea why it works :)
                     c.children = c_descendants
             c_nodes[i] = c
         return c_nodes
@@ -252,8 +250,8 @@ class Parser:
             node.name = re.sub(r"other than .*", "", node.name, flags=re.IGNORECASE).strip(", ")
 
             # check if there is "such as" in the title
-            if " such as " in node.name:
-                sa_p, sa_c = node.name.split(" such as ")
+            if " such as " in node.name.lower():
+                sa_p, sa_c = re.split(" such as | SUCH AS ", node.name, 1)
                 sa_p =  sa_p.strip(", ")
                 sa_c =  sa_c.strip(", ")
                 node.name = sa_p
@@ -262,11 +260,14 @@ class Parser:
             # check if node starts with "Details"
             if node.name[:7].lower() == "details":
                 try:
-                    node.parent.children = node.children
-                    for c_node in node.children:
-                        c_node.parent = node.parent
-                except AttributeError as e: #TODO
-                    print(e, node)
+                    if node.children:
+                        node.parent.children = node.children
+                        for c_node in node.children:
+                            c_node.parent = node.parent
+                    else:
+                        node.parent.children = []
+                except:
+                    print("error with it: ", node) #TODO
         return root_node
            
 
