@@ -30,7 +30,10 @@ class T5FineTuner(pl.LightningModule):
         # self.hparams = hparams
         self.save_hyperparameters(hparams)
 
-        self.model = MT5ForConditionalGeneration.from_pretrained(hparams.model_name_or_path)
+        try:
+            self.model = MT5ForConditionalGeneration.from_pretrained(hparams.model_name_or_path)
+        except OSError:
+            self.model = MT5ForConditionalGeneration.from_pretrained(hparams.model_name_or_path, from_tf=True)
         self.tokenizer = AutoTokenizer.from_pretrained(hparams.tokenizer_name_or_path)
 
     def is_logger(self):
@@ -216,7 +219,7 @@ args_dict = dict(
     output_dir="", # path to save the checkpoints
     model_name_or_path='google/mt5-base',
     tokenizer_name_or_path='google/mt5-base',
-    max_seq_length=64,
+    max_seq_length=32,
     learning_rate=3e-4,
     weight_decay=0.0,
     adam_epsilon=1e-8,
@@ -234,52 +237,76 @@ args_dict = dict(
     use_multiprocessing=False,
 )
 
-# train_path = "../data/train_hH.csv"
-# val_path = "../data/test_hH.csv"
-# train = pd.read_csv(train_path)
-# print (train.head())
+if __name__ == '__main__':
+    DO_TRAIN = False
+    DO_TEST = True
+    DATA_DIR = '../../IPC6_zh/'
 
-# tokenizer = AutoTokenizer.from_pretrained('google/mt5-base')
-# dataset = HyperGenerationDataset(tokenizer, '../data', 'train', 30)
-# print("Val dataset: ",len(dataset))
+    args_dict.update({'data_dir': DATA_DIR, 'output_dir': 'output/', 'num_train_epochs':3,'max_seq_length':64})
+    args = argparse.Namespace(**args_dict)
+    print(args_dict)
 
-# data = dataset[20]
-# print(tokenizer.decode(data['source_ids']))
-# print(tokenizer.decode(data['target_ids']))
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        period =1,filepath=args.output_dir,  monitor="val_loss", mode="min", save_top_k=1, prefix="checkpoint"
+    )
 
-args_dict.update({'data_dir': '../data', 'output_dir': 'output/', 'num_train_epochs':3,'max_seq_length':64})
-args = argparse.Namespace(**args_dict)
-print(args_dict)
+    train_params = dict(
+        accumulate_grad_batches=args.gradient_accumulation_steps,
+        gpus=args.n_gpu,
+        max_epochs=args.num_train_epochs,
+        early_stop_callback=False,
+        precision= 16 if args.fp_16 else 32,
+        amp_level=args.opt_level,
+        gradient_clip_val=args.max_grad_norm,
+        checkpoint_callback=checkpoint_callback,
+        callbacks=[LoggingCallback()]
+    )
 
-checkpoint_callback = pl.callbacks.ModelCheckpoint(
-    period =1,filepath=args.output_dir,  monitor="val_loss", mode="min", save_top_k=1, prefix="checkpoint"
-)
+    if DO_TRAIN:
+        print ("Initialize model")
+        model = T5FineTuner(args)
+
+        print(torch.cuda.is_available())
+        trainer = pl.Trainer(**train_params)
+
+        print (" Training model")
+        trainer.fit(model)
+        print ("training finished")
+
+        print ("Saving model")
+        model.model.save_pretrained(os.path.join(DATA_DIR, "result"))
+        print ("Saved model")
+
+    if DO_TEST:
+        from transformers import T5ForConditionalGeneration, T5Tokenizer
+        from collections import defaultdict
+        from tqdm import tqdm
+        tokenizer = T5Tokenizer.from_pretrained("google/mt5-base")
+
+        model_path = os.path.join(DATA_DIR, "result")
+        model = T5ForConditionalGeneration.from_pretrained(model_path)
+        df_test = pd.read_csv(os.path.join(DATA_DIR, "test" + '_hH.csv'))
+
+        with open(os.path.join(DATA_DIR, "gold.txt"), "w") as f1:
+            test_dict = defaultdict(list)
+            data = df_test['source_text'].astype(str).to_list()
+            gold = df_test['target_text'].astype(str).to_list()
+            for k, v in dict(zip(data,gold)).items():
+                test_dict[k].append(v)
+            f1.write("\n".join(["\t".join(v) for v in test_dict.values()]))
+
+        with open(os.path.join(DATA_DIR, 'test_results.txt'), 'w') as f2:
+            lines = []
+            for text in tqdm(test_dict.values()):
+                text_encoded = tokenizer.encode(text, return_tensors="pt")
+                generated = model.generate(
+                    text_encoded,
+                    num_beams=10, num_return_sequences=10, max_length=args_dict['max_seq_length']
+                )
+                lines.append("\t".join([tokenizer.decode(generated_sentence,skip_special_tokens=True) for generated_sentence in generated]))
+            f1.write("\n".join(lines))
 
 
-train_params = dict(
-    accumulate_grad_batches=args.gradient_accumulation_steps,
-    gpus=args.n_gpu,
-    max_epochs=args.num_train_epochs,
-    early_stop_callback=False,
-    precision= 16 if args.fp_16 else 32,
-    amp_level=args.opt_level,
-    gradient_clip_val=args.max_grad_norm,
-    checkpoint_callback=checkpoint_callback,
-    callbacks=[LoggingCallback()]
-)
+            
+            
 
-
-print ("Initialize model")
-model = T5FineTuner(args)
-
-print(torch.cuda.is_available())
-trainer = pl.Trainer(**train_params)
-
-print (" Training model")
-trainer.fit(model)
-
-print ("training finished")
-
-print ("Saving model")
-model.model.save_pretrained("/result")
-print ("Saved model")
