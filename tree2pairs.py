@@ -4,11 +4,12 @@ import csv
 from preprocessing import *
 
 from pathlib import Path
+from tqdm import tqdm
 import multiprocessing, pickle
 
 CREATE_CSV = True
 PRINT_TREE = True
-OUTPUT_DIR = "trees"
+OUTPUT_DIR = "trees_CPC8-2"
 
 def save_tree(root_node, file_name):
     file_to_store = open(file_name, "wb")
@@ -33,7 +34,12 @@ def get_root_node(file):
 if __name__ == '__main__':
     # read tree files
     output_path = Path(OUTPUT_DIR)
+    
+    # create output directory if not exists
+    output_path.mkdir(parents=True, exist_ok=True)
+
     tree_files = sorted([str(f) for f in output_path.glob("*.pickle")])
+
     dict_trees = {}
     if len(tree_files) != 9:  
         files_list = [str(f) for f in Path("cpc-titles").glob("*.txt")]
@@ -41,7 +47,7 @@ if __name__ == '__main__':
         files_list = list(set(files_list) - set(already_done))
 
         parser = Parser.Parser()
-        pool = multiprocessing.Pool(36)
+        pool = multiprocessing.Pool(2)
         for res_root, name in pool.imap_unordered(get_root_node, files_list):
             save_tree(res_root, output_path / (name + '.pickle'))
             if PRINT_TREE:
@@ -59,7 +65,7 @@ if __name__ == '__main__':
 
         with open("hH.csv", "w", newline='') as csv_f:
             writer = csv.writer(csv_f, delimiter="\t", quoting=csv.QUOTE_MINIMAL)
-            for f, root_node in dict_trees.items():
+            for f, root_node in tqdm(dict_trees.items()):
                 # save term-hyponym pairs into csv file
                 nodes = [node for node in PreOrderIter(root_node)]
                 

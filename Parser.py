@@ -3,6 +3,7 @@ from anytree import Node, PostOrderIter, PreOrderIter
 from collections import defaultdict
 from tqdm import tqdm
 import re, copy
+import spacy
 
 class Parser:
     """
@@ -13,6 +14,7 @@ class Parser:
         self.synonym_outpath = synonym_file
         self.prep_list = open(self.prep_file, 'r').read().splitlines()
         self.there_dict = {"thereof": "of", "therefor": "for", "therefore": "for", "therewith": "with", "therein": "in"}
+        self.pos_tagger = spacy.load("en_core_web_sm", disable=["textcat", "ner", "lemmatizer"])
 
     def _filter(self, title: str) -> bool:
         if "their" in title:
@@ -24,11 +26,10 @@ class Parser:
                 return False
             else:
                 # check whether the noun modified by "such" has already appeared in the title description
-                such_noun = re.search("such (\w)*", title, re.IGNORECASE)
+                such_noun = re.search("such (\w*)", title, re.IGNORECASE)
                 if such_noun:
-                    such_noun = such_noun.group(0)
-                    word_after_such = such_noun.split()[-1]
-                    if word_after_such in title.replace(such_noun, ""):
+                    word_after_such  = such_noun.group(1) 
+                    if word_after_such in title.replace(word_after_such, ""):
                         return False
                     else:
                         return True
@@ -61,7 +62,9 @@ class Parser:
             cond = (child_fst_word in self.prep_list) and cond
 
         if cond:
+            # find the position of the first word of child node in parent node
             pos = parent_words[::-1].index(child_fst_word)
+
             # remove tail part of parent node starts with the same preprosition
             parent_words = parent_words[:-(pos+1)]
             child_node = " ".join(parent_words + [child_node])
@@ -102,15 +105,14 @@ class Parser:
                     eg_c = self._attach_to_parent(eg_list[i-1], eg_c, fst_word)
                 else:
                     eg_c = eg_c.capitalize()               
-                node_2_add = Node(eg_c)
+                node_to_add = Node(eg_c)
                 try:
-                    node_2_add.children = [Node_list[-1]]
+                    node_to_add.children = [Node_list[-1]]
                 except IndexError:
                     pass
-                Node_list.append(node_2_add)
+                Node_list.append(node_to_add)
             eg_p_node.children = [Node_list[-1]]
         return eg_p_node
-
 
     def _split(self, title: str) -> dict:
         res_forest = {}
@@ -121,8 +123,11 @@ class Parser:
         # remove abbreviations inside "[" and "]"
         title = self._get_syns_in_brackets(title)
 
-        # 1. split by semicolon
+        # 1. split by semicolon 
         titles = title.split(";")
+        if len(titles) == 1:
+            pass # TODO or split by parallel structure (detected by pos tagging)
+            
         sub_pattern = r"[ ,]?((in general|or the like|or other parts|not provided for elsewhere|specified in the subgroup)$|i\.e\..*)"
         match_pattern_head = r"^Other "
 
@@ -240,8 +245,11 @@ class Parser:
         for node in nodes_to_search:
             # check if node starts with lower case
             fst_word = node.name.split()[0]
-            if node.name[0].islower() and fst_word in node.parent.name and fst_word != node.parent.name.lower().split()[0]:
-                node.name = self._attach_to_parent(node.parent.name, node.name, fst_word, for_eg = False)
+            try:
+                if node.name[0].islower() and fst_word in node.parent.name and fst_word != node.parent.name.lower().split()[0]:
+                    node.name = self._attach_to_parent(node.parent.name, node.name, fst_word, for_eg = False)
+            except AttributeError:  # TODO  AttributeError: 'NoneType' object has no attribute 'name'
+                continue
 
             # check if there is words such as "thereof", "therefor", "therewith" etc. in the title 
             #TODO
@@ -266,10 +274,15 @@ class Parser:
                             c_node.parent = node.parent
                     else:
                         node.parent.children = []
-                except:
-                    print("error with it: ", node) #TODO
-        return root_node
-           
+                except Exception as e:
+                    print(e)
+                    #print("error with it: ", node) #TODO
+
+            # remove "[" at the end of title (happens in domain Y) or "[" at the end of title but without "[" before
+            node.name = node.name.rstrip("[ ")
+            if node.name[-1] == "]" and "[" not in node.name:
+                node.name = node.name.rstrip("] ")
+        return root_node        
 
     def get_taxonomy(self, root_node: Node, root_name: str) -> Node:
         # create new root node 
@@ -331,6 +344,6 @@ class Parser:
             
         res_root.children = copy.deepcopy(top_layer)
 
-        # to check the title connatenation from root node to leaf nodes
+        # to check last time the titles connatenated from root node to leaf nodes
         res_root = self._valide(res_root)
         return res_root
