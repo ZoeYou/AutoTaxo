@@ -7,55 +7,65 @@ import spacy
 
 class Parser:
     """
-    Basic parser for spliting cpc titles into its taxonomy structure.
+    Basic parser for spliting cpc titles into taxonomy structure.
     """
     def __init__(self, prepositions_file='prep_en.txt', synonym_file='synonyms.txt'):
         self.prep_file = prepositions_file
         self.synonym_outpath = synonym_file
         self.prep_list = open(self.prep_file, 'r').read().splitlines()
         self.there_dict = {"thereof": "of", "therefor": "for", "therefore": "for", "therewith": "with", "therein": "in"}
-        self.pos_tagger = spacy.load("en_core_web_sm", disable=["textcat", "ner", "lemmatizer"])
+        # self.pos_tagger = spacy.load("en_core_web_sm", disable=["textcat", "ner", "lemmatizer"])
 
     def _filter(self, title: str) -> bool:
         if "their" in title:
             return True
-
-        title_words = title.split()
-        if "such" in title_words:
-            if "such as" in title or "such a" in title:
-                return False
-            else:
-                # check whether the noun modified by "such" has already appeared in the title description
-                such_noun = re.search("such (\w*)", title, re.IGNORECASE)
-                if such_noun:
-                    word_after_such  = such_noun.group(1) 
-                    if word_after_such in title.replace(word_after_such, ""):
-                        return False
-                    else:
-                        return True
-                else:
+        if "such as " in title or "such a " in title:
+            return False
+        if " such " in title:
+            # check whether the noun modified by "such" has already appeared in the title description
+            such_noun = re.search("such (\w*)", title, re.IGNORECASE)
+            if such_noun:
+                word_after_such  = such_noun.group(1) 
+                if word_after_such in title.replace(word_after_such, ""):
                     return False
+                else:
+                    return True
+            else:
+                return False    # TODO
 
     def _get_syns_in_brackets(self, title: str) -> str:
-        #Remove "[" "]"" from title and save synonyms (e.g. [SVM] and Support Vector Machine) 
-        in_brackets = [e for e in re.finditer(r"(\[\S*\]),?;?", title)]
+        """
+        Remove "[" "]"" from title and save synonyms (e.g. Support Vector Machine [SVM]) 
+
+        """
+        in_brackets = re.finditer(r"(\[\S*\]),?;?", title)
         if in_brackets:
-            title_words = title.split(" ")
-            for match in in_brackets:
-                #Checking that the match is not a chemistry component: -N[O]-N= ("[" and "]" have spaces on the left/ right sides)
-                if match.group() in title_words:
-                    if match.group()[-1] == ";":
-                        title_words[title_words.index(match.group())-1] = title_words[title_words.index(match.group())-1] + ";"
-                    if match.group()[-1] == ",":
-                        title_words[title_words.index(match.group())-1] = title_words[title_words.index(match.group())-1] + ","
-                    title_words.remove(match.group())
-                    with open(self.synonym_outpath, "a") as out_f:
-                        out_f.write(title + "\t" + match.group().strip(" ,") + "\n")
-            title = " ".join(title_words)
+            with open(self.synonym_outpath, "a") as out_f:
+                out_f.write(title + "\t" + in_brackets[0].group(1).strip(" ,") + "\n")
+                title_temp = title[:in_brackets[0].start()]
+                for i in range(len(in_brackets)-1):
+                    out_f.write(title + "\t" + in_brackets[i+1].group(1).strip(" ,") + "\n")
+                    title_temp += title[in_brackets[i].end()+1:in_brackets[i+1].start()]
+        
+            title = title_temp
+        return title
+    
+    def _get_syns_by_ie(self, title: str) -> str:
+        starts_by_ie = re.finditer(r"i\.e\.?\s([^;,]*)", title)
+        if starts_by_ie:
+            with open(self.synonym_outpath, "a") as out_f:
+                out_f.write(title + "\t" + starts_by_ie[0].group(1).strip(" ,") + "\n")
+                title_temp = title[:starts_by_ie[0].start()]
+
+                for i in range(len(starts_by_ie)-1):
+                    out_f.write(title + "\t" + starts_by_ie[i+1].group(1).strip(" ,") + "\n")
+                    title_temp += title[starts_by_ie[i].end()+1:starts_by_ie[i+1].start()]
+
+            title = title_temp
         return title
 
-    def _attach_to_parent(self, parent_node: str, child_node: str, child_fst_word: str, for_eg: bool = True) -> str:
-        parent_words = parent_node.lower().split()
+    def _attach_to_parent(self, parent_title: str, child_title: str, child_fst_word: str, for_eg: bool = True) -> str:
+        parent_words = parent_title.lower().split()
 
         cond = child_fst_word in parent_words
         if for_eg:
@@ -64,21 +74,20 @@ class Parser:
         if cond:
             # find the position of the first word of child node in parent node
             pos = parent_words[::-1].index(child_fst_word)
-
-            # remove tail part of parent node starts with the same preprosition
+            # remove tail part of parent node starting with the same preprosition
             parent_words = parent_words[:-(pos+1)]
-            child_node = " ".join(parent_words + [child_node])
+            child_title = " ".join(parent_words + [child_title])
         else:
-            child_node = " ".join([parent_node, child_node])
-        return child_node
+            child_title = " ".join([parent_title, child_title])
+        return child_title
 
     def _split_eg(self, title: str, substitution_patterns: str) -> Node:
         try:
-            eg_p, eg_c = title.split('e.g.')
+            eg_p, eg_c = title.split('e.g.', flags=re.IGNORECASE)
             eg_p = re.sub(substitution_patterns, "", eg_p.strip(", "), flags=re.IGNORECASE)
             eg_c = re.sub(substitution_patterns, "", eg_c.strip(", "), flags=re.IGNORECASE)
             eg_p_node = Node(eg_p)
-            # if the first word of example or the final word of main description is a preprosition, concatename them
+            # if the first word of example or the final word of main description is a preprosition, concatenate them for the child node
             try:
                 fst_word = eg_c.split()[0].lower()
                 if fst_word in self.prep_list or eg_p.split()[-1].lower() in self.prep_list: 
@@ -98,13 +107,14 @@ class Parser:
             Node_list = []                    
             for i in range(1, len(eg_list))[::-1]:
                 eg_c = eg_list[i] 
-                # if the first word of example or the final word of head is a preprosition, concatename their names
+
+                # if the first word of example or the final word of head is a preprosition, concatename their names for child node
                 fst_word = eg_c.split()[0].lower()
-                
                 if fst_word in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:
                     eg_c = self._attach_to_parent(eg_list[i-1], eg_c, fst_word)
                 else:
-                    eg_c = eg_c.capitalize()               
+                    eg_c = eg_c.capitalize() 
+
                 node_to_add = Node(eg_c)
                 try:
                     node_to_add.children = [Node_list[-1]]
@@ -122,19 +132,21 @@ class Parser:
 
         # remove abbreviations inside "[" and "]"
         title = self._get_syns_in_brackets(title)
+        # remove content after i.e.
+        title = self._get_syns_by_ie(title)
 
         # 1. split by semicolon 
         titles = title.split(";")
         if len(titles) == 1:
             pass # TODO or split by parallel structure (detected by pos tagging)
             
-        sub_pattern = r"[ ,]?((in general|or the like|or other parts|not provided for elsewhere|specified in the subgroup)$|i\.e\..*)"
-        match_pattern_head = r"^Other "
+        patterns_to_remove = r"[ ,]?((in general|or the like|or other parts|not provided for elsewhere|specified in the subgroup)$|other than .*)"
+        patterns_to_remove_head = r"^Other "
 
         for t in titles:
-            t = re.sub(sub_pattern, "", t.strip(", "), flags=re.IGNORECASE).strip(", ") # remove "in general" or "all the like" at the end of the title
-            if re.match(match_pattern_head, t):
-                t = re.sub(match_pattern_head,"",t).capitalize() # remove "Other" at the beginning of the title
+            t = re.sub(patterns_to_remove, "", t.strip(", "), flags=re.IGNORECASE).strip(", ") # remove "in general" or "all the like", etc. at the end of the title
+            if re.match(patterns_to_remove_head, t):
+                t = re.sub(patterns_to_remove_head,"",t).capitalize() # remove "Other" at the beginning of the title
             # remove titles with Pronouns like "such", "their"
             if self._filter(t):
                 continue
@@ -142,12 +154,12 @@ class Parser:
 
         # 2. split by "such as"
             if " such as " in t:
-                sa_p, sa_c = re.split(" such as | SUCH AS ", t, maxsplit=1)
-                sa_p = re.sub(sub_pattern, "", sa_p.strip(", "), flags=re.IGNORECASE)
-                sa_c = re.sub(sub_pattern, "", sa_c.strip(", "), flags=re.IGNORECASE)
+                sa_p, sa_c = re.split(" such as ", t, maxsplit=1, flags=re.IGNORECASE)
+                sa_p = re.sub(patterns_to_remove, "", sa_p.strip(", "), flags=re.IGNORECASE)
+                sa_c = re.sub(patterns_to_remove, "", sa_c.strip(", "), flags=re.IGNORECASE)
                 sa_p_node = Node(sa_p)
                 if "e.g." in sa_p_node.name:
-                    sa_p_node = self._split_eg(sa_p_node.name, sub_pattern)
+                    sa_p_node = self._split_eg(sa_p_node.name, patterns_to_remove)
                 # if the first word of example or the final word of main description is a preprosition, concatename them
                 try:
                     fst_word = sa_c.split()[0].lower()
@@ -155,34 +167,35 @@ class Parser:
                         sa_c = self._attach_to_parent(sa_p, sa_c, fst_word)
                     else:
                         sa_c = sa_c.capitalize()
+
                     # check if it has "e.g." in the title of child node
                     sa_c_node = Node(sa_c)
                     if "e.g." in sa_c_node.name:
-                        sa_c_node = copy.deepcopy(self._split_eg(sa_c_node.name, sub_pattern))
+                        sa_c_node = copy.deepcopy(self._split_eg(sa_c_node.name, patterns_to_remove))
                     sa_p_node.children = list(copy.deepcopy(sa_p_node.children)) + [sa_c_node]
                     res_forest[t] = sa_p_node
                 except IndexError:
-                        pass   # child node without content            
+                        pass   # child node with empty content            
 
         # 3. split by "e.g." without "such as"
             if "e.g." in t:
-                res_forest[t] = self._split_eg(t, sub_pattern)         
+                res_forest[t] = self._split_eg(t, patterns_to_remove)         
         return res_forest
 
-    def _check(self, p_node: str, c_nodes: list) -> list:
+    def _normalise(self, p_node: str, c_nodes: list) -> list:
         """
         1. check whether children nodes have the same title as parent title, if true remove the title in children nodes
         2. check whether children nodes have repeated titles among each other, if true combine their descendants nodes
-        3. check if children nodes are ended with "thereof", "therefor"/"therefore" and "therewith" (without "or" also in the title), if true remove them
+        3. check if children nodes are ended with "thereof", "therefor"/"therefore" and "therewith" (without "or" also in the title), if true remove them   # TODO
         """
         p_name = p_node.name
         c_nodes = [c for c in c_nodes if c.name != p_name]
 
-        dict_name_descendants = defaultdict(list)  # values of dictinary are lists of Nodes
+        dict_name_descendants = defaultdict(list)  # values of dictionary are lists of Nodes
         for c in c_nodes:
             dict_name_descendants[c.name].append(c)
         
-        # remove duplication children nodes
+        # remove duplicated children nodes
         for k,v in dict_name_descendants.items():
             head_node = v[0]
             if len(v) > 1:   
@@ -222,25 +235,24 @@ class Parser:
             c_nodes[i] = c
         return c_nodes
 
-    def _update_child_layer(self, p_node: Node, c_nodes: list, clean_p: bool) -> Node:
+    def _update_child_layer(self, p_node: Node, c_nodes: list, sterilized_p: bool) -> Node:
         """
         concatenate a parent node and its children nodes (childnode could be a tree depends on the results of splitting)
         """
-        if clean_p:
+        if sterilized_p:
             children_list = []
         else:
             children_list = list(p_node.children)   # original children nodes of the parent node
         for c in c_nodes:
-            # check if vide name, if yes delete it
-            if not c.name:
-                c_nodes.remove(c)
+            # delete vide node
+            if not c.name: c_nodes.remove(c)
         
         children_list.extend(c_nodes)                   
         p_node.children = children_list
         return p_node 
 
     def _valide(self, root_node: str) -> Node:
-        # all nodes in pre order 
+        # all nodes in pre order for validation
         nodes_to_search = [node for node in PreOrderIter(root_node)][1:]
         for node in nodes_to_search:
             # check if node starts with lower case
@@ -248,24 +260,21 @@ class Parser:
             try:
                 if node.name[0].islower() and fst_word in node.parent.name and fst_word != node.parent.name.lower().split()[0]:
                     node.name = self._attach_to_parent(node.parent.name, node.name, fst_word, for_eg = False)
-            except AttributeError:  # TODO  AttributeError: 'NoneType' object has no attribute 'name'
+            except AttributeError:  #  AttributeError: 'NoneType' object has no attribute 'name' (node.paren does not exist?)
                 continue
 
-            # check if there is words such as "thereof", "therefor", "therewith" etc. in the title 
+            # check if there is words such as "thereof", "therefor", "therewith" etc. inside the titles 
             #TODO
-
-            # remove "other than .*" at the end of title
-            node.name = re.sub(r"other than .*", "", node.name, flags=re.IGNORECASE).strip(", ")
 
             # check if there is "such as" in the title
             if " such as " in node.name.lower():
-                sa_p, sa_c = re.split(" such as | SUCH AS ", node.name, 1)
+                sa_p, sa_c = re.split(" such as ", node.name, 1, flags=re.IGNORECASE)
                 sa_p =  sa_p.strip(", ")
                 sa_c =  sa_c.strip(", ")
                 node.name = sa_p
                 node.children = list(copy.deepcopy(node.children)) + [Node(sa_c)]    
 
-            # check if node starts with "Details"
+            # check if node starts with "Details", lift the current node up one level if so
             if node.name[:7].lower() == "details":
                 try:
                     if node.children:
@@ -326,7 +335,7 @@ class Parser:
             if node.name + str(node.depth) in saved_nodes:
                 descendants = saved_nodes[node.name + str(node.depth)] # a list of children nodes of current node
                 for c in c_layer:
-                    c.children = self._check(c, copy.deepcopy(c.children) + copy.deepcopy(descendants.children))
+                    c.children = self._normalise(c, copy.deepcopy(c.children) + copy.deepcopy(descendants.children))
 
             p_node = copy.deepcopy(node.parent)
             if p_node:
@@ -335,7 +344,7 @@ class Parser:
                     p_node = saved_nodes[p_node.name + str(p_node.depth)]
                 else:
                     new_p = True
-                p_v = self._update_child_layer(p_node, c_layer, clean_p = new_p)
+                p_v = self._update_child_layer(p_node, c_layer, sterilized_p = new_p)
 
                 # update parent node in result dictionary
                 saved_nodes[p_node.name+str(p_node.depth)] = p_v
@@ -344,6 +353,6 @@ class Parser:
             
         res_root.children = copy.deepcopy(top_layer)
 
-        # to check last time the titles connatenated from root node to leaf nodes
+        # to check last time the titles connatenated in pre-order iteration
         res_root = self._valide(res_root)
         return res_root
