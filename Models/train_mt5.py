@@ -10,7 +10,7 @@ import torch, random
 import pytorch_lightning as pl
 from transformers import (
     AdamW,
-    MT5ForConditionalGeneration,
+    T5ForConditionalGeneration,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
@@ -31,9 +31,9 @@ class T5FineTuner(pl.LightningModule):
         self.save_hyperparameters(hparams)
 
         try:
-            self.model = MT5ForConditionalGeneration.from_pretrained(hparams.model_name_or_path)
+            self.model = T5ForConditionalGeneration.from_pretrained(hparams.model_name_or_path)
         except OSError:
-            self.model = MT5ForConditionalGeneration.from_pretrained(hparams.model_name_or_path, from_tf=True)
+            self.model = T5ForConditionalGeneration.from_pretrained(hparams.model_name_or_path, from_tf=True)
         self.tokenizer = AutoTokenizer.from_pretrained(hparams.tokenizer_name_or_path)
 
     def is_logger(self):
@@ -217,8 +217,8 @@ def get_dataset(tokenizer, type_path, args):
 args_dict = dict(
     data_dir="", # path for data files
     output_dir="", # path to save the checkpoints
-    model_name_or_path='google/mt5-base',
-    tokenizer_name_or_path='google/mt5-base',
+    model_name_or_path='t5-base',
+    tokenizer_name_or_path='t5-base',
     max_seq_length=32,
     learning_rate=3e-4,
     weight_decay=0.0,
@@ -238,16 +238,16 @@ args_dict = dict(
 )
 
 if __name__ == '__main__':
-    DO_TRAIN = False
+    DO_TRAIN = True
     DO_TEST = True
-    DATA_DIR = '../../IPC6_zh/'
+    DATA_DIR = './data_old'
 
     args_dict.update({'data_dir': DATA_DIR, 'output_dir': 'output/', 'num_train_epochs':3,'max_seq_length':64})
     args = argparse.Namespace(**args_dict)
     print(args_dict)
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        period =1,filepath=args.output_dir,  monitor="val_loss", mode="min", save_top_k=1, prefix="checkpoint"
+        dirpath=args.output_dir,  monitor="val_loss", mode="min", save_top_k=1, auto_insert_metric_name="checkpoint"
     )
 
     train_params = dict(
@@ -281,7 +281,7 @@ if __name__ == '__main__':
         from transformers import T5ForConditionalGeneration, T5Tokenizer
         from collections import defaultdict
         from tqdm import tqdm
-        tokenizer = T5Tokenizer.from_pretrained("google/mt5-base")
+        tokenizer = T5Tokenizer.from_pretrained("t5-base")
 
         model_path = os.path.join(DATA_DIR, "result")
         model = T5ForConditionalGeneration.from_pretrained(model_path)
