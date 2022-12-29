@@ -38,7 +38,7 @@ class Parser:
         Remove "[" "]"" from title and save synonyms (e.g. Support Vector Machine [SVM]) 
 
         """
-        in_brackets = re.finditer(r"(\[\S*\]),?;?", title)
+        in_brackets = [e for e in re.finditer(r"(\[\S*\]),?;?", title)]
         if in_brackets:
             with open(self.synonym_outpath, "a") as out_f:
                 out_f.write(title + "\t" + in_brackets[0].group(1).strip(" ,") + "\n")
@@ -51,7 +51,7 @@ class Parser:
         return title
     
     def _get_syns_by_ie(self, title: str) -> str:
-        starts_by_ie = re.finditer(r"i\.e\.?\s([^;,]*)", title)
+        starts_by_ie = [e for e in re.finditer(r"i\.e\.?\s([^;,]*)", title)]
         if starts_by_ie:
             with open(self.synonym_outpath, "a") as out_f:
                 out_f.write(title + "\t" + starts_by_ie[0].group(1).strip(" ,") + "\n")
@@ -83,7 +83,7 @@ class Parser:
 
     def _split_eg(self, title: str, substitution_patterns: str) -> Node:
         try:
-            eg_p, eg_c = title.split('e.g.', flags=re.IGNORECASE)
+            eg_p, eg_c = re.split("e.g.", title, flags=re.IGNORECASE)
             eg_p = re.sub(substitution_patterns, "", eg_p.strip(", "), flags=re.IGNORECASE)
             eg_c = re.sub(substitution_patterns, "", eg_c.strip(", "), flags=re.IGNORECASE)
             eg_p_node = Node(eg_p)
@@ -101,27 +101,28 @@ class Parser:
         except ValueError: # more than one "e.g." in the title
             eg_list = [eg.strip(", ") for eg in title.split('e.g.')]
             eg_list = [re.sub(substitution_patterns, "", eg, flags=re.IGNORECASE) for eg in eg_list]
-            eg_p = eg_list[0]
-            eg_p_node = Node(eg_p)
+            eg_list = [eg for eg in eg_list if eg]
+            eg_p_node = Node(eg_list[0])
 
-            Node_list = []                    
-            for i in range(1, len(eg_list))[::-1]:
-                eg_c = eg_list[i] 
+            if len(eg_list) > 1:
+                Node_list = []                    
+                for i in range(1, len(eg_list))[::-1]:
+                    eg_c = eg_list[i] 
 
-                # if the first word of example or the final word of head is a preprosition, concatename their names for child node
-                fst_word = eg_c.split()[0].lower()
-                if fst_word in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:
-                    eg_c = self._attach_to_parent(eg_list[i-1], eg_c, fst_word)
-                else:
-                    eg_c = eg_c.capitalize() 
+                    # if the first word of example or the final word of head is a preprosition, concatename their names for child node
+                    fst_word = eg_c.split()[0].lower()
+                    if fst_word in self.prep_list or eg_list[i-1].split()[-1].lower() in self.prep_list:
+                        eg_c = self._attach_to_parent(eg_list[i-1], eg_c, fst_word)
+                    else:
+                        eg_c = eg_c.capitalize() 
 
-                node_to_add = Node(eg_c)
-                try:
-                    node_to_add.children = [Node_list[-1]]
-                except IndexError:
-                    pass
-                Node_list.append(node_to_add)
-            eg_p_node.children = [Node_list[-1]]
+                    node_to_add = Node(eg_c)
+                    try:
+                        node_to_add.children = [Node_list[-1]]
+                    except IndexError:
+                        pass
+                    Node_list.append(node_to_add)
+                eg_p_node.children = [Node_list[-1]]
         return eg_p_node
 
     def _split(self, title: str) -> dict:
@@ -275,7 +276,7 @@ class Parser:
                 node.children = list(copy.deepcopy(node.children)) + [Node(sa_c)]    
 
             # check if node starts with "Details", lift the current node up one level if so
-            if node.name[:7].lower() == "details":
+            if node.name[:7].lower() == "details" or node.name[-7:].lower() == "details":
                 try:
                     if node.children:
                         node.parent.children = node.children

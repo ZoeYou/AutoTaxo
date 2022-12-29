@@ -1,4 +1,4 @@
-from anytree import Node
+from anytree import Node, RenderTree
 import re
 import pandas as pd
 
@@ -6,7 +6,7 @@ TARGET_LEVEL = 8
 
 global dict_lvl
 dict_lvl = {1: -3, 3: -2, 4: -1, 6: 0}
-MAX_DEPTH = 2
+MAX_DEPTH = 15
 
 def get_level(x):
     """
@@ -16,12 +16,12 @@ def get_level(x):
     try:
         return int(lvl)
     except ValueError:
-        title = x['title']
-        return dict_lvl[len(title)]
+        code = x['code']
+        return dict_lvl[len(code)]
 
 def clean_descr(description):
     """
-    1. remove references from the description, such as *** (preserving A23B; obtaining protein compositions for foodstuffs A23J1/00;)
+    1. remove contents in the brakets with CPC codes from description, such as *** (preserving A23B; obtaining protein compositions for foodstuffs A23J1/00;)
     2. remove '{' and '}'
     """
     description = re.sub(r'\ ?\([\w\W]*([A-Z]{1}[0-9]{2}[A-Z]{1}[0-9]*[\/]*[0-9]*)*[\w\W]*\)', '', description)
@@ -31,7 +31,7 @@ def clean_descr(description):
 
 def has_cpc(description):
     """
-    4. check whether a title desciption has CPC code inside
+    4. check whether a title desciption has CPC codes
     e.g. having alternatively specified atoms bound to the phosphorus atom and not covered by a single one of groups A01N57/10, A01N57/18, A01N57/26, A01N57/34
     """
     cpc_pattern = r'[A-Za-z]{1}[0-9]{2}[A-Za-z]{0,1}[0-9]*[\/]*[0-9]*'
@@ -43,7 +43,7 @@ def has_cpc(description):
 
 def is_trash_title(description):
     """
-    5. check whether a title description is a trash title (as a complement to other classes)
+    5. check whether a title description is a trash title (such as a complement class to other classes)
     """
     description = description.lower()
     if ("subject matter not" in description and "provided for in" in description) or ("covered by" in description and (" subclass" in description or " group" in description)) or ("dummy group" in description):
@@ -53,7 +53,7 @@ def is_trash_title(description):
 
 def next_same_lvl_index(subdf,lvl):
     """
-    find index before the next sibling/parent title in the given dataframe
+    find index before the next parent title in the given dataframe
     """
     lvl_df = subdf[subdf['lvl'] <= lvl]
     idx_df = lvl_df.index
@@ -119,7 +119,7 @@ def rm_Details(dataframe):
     return dataframe.reset_index(drop=True)
 
 def read_label_file(file_name, max_level=TARGET_LEVEL):
-    df = pd.read_csv(file_name, header=None, sep='\t', dtype=object, names=['title', 'lvl', 'description']) # cpc files downloaded from https://www.cooperativepatentclassification.org/cpcSchemeAndDefinitions/bulk
+    df = pd.read_csv(file_name, header=None, sep='\t', dtype=object, names=['code', 'lvl', 'description']) # cpc files downloaded from https://www.cooperativepatentclassification.org/cpcSchemeAndDefinitions/bulk
     df['lvl'] = df.apply(get_level, axis=1)
 
     if max_level in [1,3,4,6]:
@@ -132,29 +132,29 @@ def read_label_file(file_name, max_level=TARGET_LEVEL):
     df = rm_Details(df)
     return df
 
-def find_father(df, child_lvl, diff=1):
+def find_parent_node(df, child_lvl, diff=1):
     for _, row in df[::-1].iterrows():
         if row.lvl + diff == child_lvl:
-            return row.title
+            return row.code
     if child_lvl - diff >= -3 :
-        return find_father(df, child_lvl, diff+1)
+        return find_parent_node(df, child_lvl, diff+1)
+
+def print_tree(root_node):
+    for pre, _, node in RenderTree(root_node):
+        print("%s%s" % (pre, node.name))
 
 def build_tree(df):
     node_dict = {}
-    root_title = df.loc[0, 'title']
+    root_title = df.loc[0, 'code']
     root_desc = df.loc[0, 'description']
     node_dict[root_title] = Node(root_desc)
 
     for i, row in df[1:].iterrows():
         child_lvl = row.lvl
-        child_title = row.title
+        child_title = row.code
         child_desc = row.description
-        try:
-            father_title = find_father(df[:i], child_lvl)
-            node_dict[child_title] = Node(child_desc, parent = node_dict[father_title])
-        except KeyError:
-            #father_title = find_father(df[:i], child_lvl, 2)    #TODO
-            #node_dict[child_title] = Node(child_desc, parent = node_dict[father_title])    
-            print(df[:i])
-            print(row)       
+        father_title = find_parent_node(df[:i], child_lvl)
+        node_dict[child_title] = Node(child_desc, parent = node_dict[father_title])
+
+    print_tree(node_dict[root_title])
     return node_dict[root_title]
