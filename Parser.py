@@ -298,7 +298,7 @@ class Parser:
         # create new root node 
         res_root = Node(root_name)
 
-        # all nodes in post order ()
+        # all nodes in post order
         nodes_to_search = [node for node in PostOrderIter(root_node)]
         
         saved_nodes = {}
