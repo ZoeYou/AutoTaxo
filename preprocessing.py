@@ -2,11 +2,13 @@ from anytree import Node, RenderTree
 import re
 import pandas as pd
 
-TARGET_LEVEL = 8
+global TARGET_LEVEL, MAX_DEPTH
+TARGET_LEVEL, MAX_DEPTH = 8, 2
 
 global dict_lvl
 dict_lvl = {1: -3, 3: -2, 4: -1, 6: 0}
-MAX_DEPTH = 15
+
+
 
 def get_level(x):
     """
@@ -156,5 +158,4 @@ def build_tree(df):
         father_title = find_parent_node(df[:i], child_lvl)
         node_dict[child_title] = Node(child_desc, parent = node_dict[father_title])
 
-    print_tree(node_dict[root_title])
     return node_dict[root_title]
