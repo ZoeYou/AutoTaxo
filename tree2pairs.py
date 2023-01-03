@@ -9,7 +9,7 @@ import multiprocessing, pickle
 
 CREATE_CSV = True   # create term-hypernym pairs based on taxonomy => save in csv file
 PRINT_TREE = True
-OUTPUT_DIR = "trees_CPC8-2"
+OUTPUT_DIR = f"trees_CPC{TARGET_LEVEL}-{MAX_DEPTH}"
 
 def save_tree(root_node, file_name):
     with open(file_name, "wb") as outf:

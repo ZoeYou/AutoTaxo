@@ -76,9 +76,9 @@ class Parser:
             pos = parent_words[::-1].index(child_fst_word)
             # remove tail part of parent node starting with the same preprosition
             parent_words = parent_words[:-(pos+1)]
-            child_title = " ".join(parent_words + [child_title])
+            child_title = " @@@".join(parent_words + [child_title])
         else:
-            child_title = " ".join([parent_title, child_title])
+            child_title = " @@@".join([parent_title, child_title])
         return child_title
 
     def _split_eg(self, title: str, substitution_patterns: str) -> Node:
@@ -190,7 +190,7 @@ class Parser:
         3. check if children nodes are ended with "thereof", "therefor"/"therefore" and "therewith" (without "or" also in the title), if true remove them   # TODO
         """
         p_name = p_node.name
-        c_nodes = [c for c in c_nodes if c.name != p_name]
+        c_nodes = [c for c in c_nodes if c.name.lower() != p_name.lower()]
 
         dict_name_descendants = defaultdict(list)  # values of dictionary are lists of Nodes
         for c in c_nodes:
@@ -275,7 +275,6 @@ class Parser:
                 node.name = sa_p
                 node.children = copy.deepcopy(node.children) + (Node(sa_c),)    
             
-            ###"""
             # check if node starts with "Details", lift the current node up one level if so
             if node.name[:7].lower() == "details" or node.name[-7:].lower() == "details":
                 if node.parent:
