@@ -221,7 +221,7 @@ class Parser:
                     c.name = " ".join(words_list)
 
             # if the first character of children node is in lower case, then concatenate with parent node
-            if c.name[0].islower(): 
+            if c.name[0].islower() or c.name.split()[0].lower() in self.prep_list:
                 c.name = self._attach_to_parent(p_name, c.name, c.name.split()[0], for_eg=False)
 
                 c_descendants = list(copy.deepcopy(c.children))

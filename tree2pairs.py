@@ -54,6 +54,8 @@ if __name__ == '__main__':
                     for pre, _, node in RenderTree(res_root):
                         out_f.write("%s%s" % (pre, node.name))
                         out_f.write("\n")
+        pool.close()
+        pool.join()
 
     if CREATE_CSV:  # save term-hyponym pairs into csv file
         for f in tree_files:

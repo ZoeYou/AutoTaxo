@@ -1,20 +1,29 @@
 # script used to seperate entities with descriptive contents
 from pathlib import Path
-import multiprocessing, pickle, re, copy
+import multiprocessing, pickle, re, copy, sys
 from anytree import RenderTree, PostOrderIter, PreOrderIter
+from count_freqs import * 
+
 
 global preposition_list
 preposition_list = ['about', 'above', 'across', 'after', 'against', 'along', 'among', 'around', 'at', 'before', 'behind', 'between', 'beyond', 'but', 'by', 'despite', 'down', 'during', 'except', 'for', 'from', 'in', 'into', 'like', 'near', 'of', 'off', 'on', 'onto', 'out', 'over', 'past', 'plus', 'since', 'throughout', 'to', 'towards', 'under', 'until', 'up', 'upon', 'with', 'within', 'without', 'having', 'comprising', 'or']
 
-input_path = Path('./trees_CPC8-3')
+input_path = Path(sys.argv[1])
 tree_files = sorted([str(f) for f in input_path.glob("*.pickle")])
+
+def save_tree(root_node, file_name):
+    with open(file_name, "wb") as outf:
+        pickle.dump(root_node, outf)
 
 def load_tree(file_name):
     with open(file_name, "rb") as inf:
         root_node = pickle.load(inf)
     return root_node
 
-descriptive_patterns = r'accessories|arrangements?|applications?|apparatus?|appliances?|^methods?|methods or|methods for| methods|details|means for|devices? | devices?|^tools?|or methods?|or implements?|^machines for|machines or|instruments for|implements for|equipments? for|specially adapted|characterised by|^types? of|^special|systems using|instruments? employing|^measurement? of|therefor|thereof|therewith|thereby| designed for |^treatment |aspects of|particular use of|general design| them | their|^preparation'
+descriptive_patterns = r'accessories|arrangements?|applications?|apparatus?|appliances?|^methods?|methods or|methods for| methods|details|means for|devices? | devices?|^tools?|or methods?|or implements?|^machines for|machines or|instruments for|implements for|equipments? for|specially adapted|characterised by|^types? of|^special|systems using|instruments? employing|^measurement? of|therefor|thereof|therewith|thereby| designed for |^treatment |aspects of|particular use of|general design| them | their|^preparation|mechanisms?|^Processes for'
+
+
+
 
 for file in tree_files:
     tree_entities = copy.deepcopy(load_tree(file))
@@ -34,14 +43,25 @@ for file in tree_files:
     # save updated tree in a new file
     output_file_ents = input_path / (tree_entities.name + '_entities.txt')
     output_file_desc = input_path / (tree_entities.name + '_desc.txt')
+    output_tree_ents = input_path / (tree_entities.name + '_entities.pickle')
+    output_tree_desc = input_path / (tree_entities.name + '_desc.pickle')
 
+    # print separated taxonomies in text files
     with output_file_ents.open('w') as out_f:
+        list_entities = [node.name for _,_,node in RenderTree(tree_entities) if node.name]
+        freq_entities = freqs_solr(list_entities)
         for pre, _, node in RenderTree(tree_entities):
-            out_f.write("%s%s" % (pre, node.name))
+            out_f.write("%s%s\t%s" % (pre, node.name, freq_entities[node.name]))
             out_f.write("\n")
 
     with output_file_desc.open('w') as out_f:
+        list_desc = [node.name for _,_,node in RenderTree(tree_descriptions) if node.name]
+        freq_desc = freqs_solr(list_desc)
         for pre, _, node in RenderTree(tree_descriptions):
-            out_f.write("%s%s" % (pre, node.name))
+            out_f.write("%s%s\t%s" % (pre, node.name, freq_desc[node.name]))
             out_f.write("\n")
+
+    # save separated taxonomies as tree object
+    save_tree(tree_entities, output_tree_ents)
+    save_tree(tree_descriptions, output_tree_desc)
 
