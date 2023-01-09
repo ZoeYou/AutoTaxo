@@ -33,7 +33,7 @@ def split_leaf_node(node) -> list:
 
 
 if __name__ == '__main__':
-    preposition_list = open('./prep_en.txt','w').read().splitlines()
+    preposition_list = open('./prep_en.txt','r').read().splitlines()
     descriptive_patterns = r'accessories|arrangements?|applications?|apparatus?|appliances?|^methods?|methods or|methods for| methods|details|means for|devices? | devices?|^tools?|or methods?|or implements?|^machines for|machines or|instruments for|implements for|equipments? for|specially adapted|characterised by|^types? of|^special|systems using|instruments? employing|^measurement? of|therefor|thereof|therewith|thereby| designed for |^treatment |aspects of|particular use of|general design| them | their|^preparation|mechanisms?|^Processes for'
 
     input_path = Path(sys.argv[1])

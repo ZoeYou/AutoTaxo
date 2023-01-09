@@ -1,6 +1,9 @@
 from anytree import Node, RenderTree
-import re
 import pandas as pd
+import nltk, re
+from nltk.tokenize import word_tokenize
+from nltk.corpus import wordnet as wn
+
 
 global TARGET_LEVEL, MAX_DEPTH
 TARGET_LEVEL, MAX_DEPTH = 6, 0
@@ -24,11 +27,15 @@ def get_level(x):
 def clean_descr(description):
     """
     1. remove contents in the brakets with CPC codes from description, such as *** (preserving A23B; obtaining protein compositions for foodstuffs A23J1/00;)
-    2. remove '{' and '}'
+    2. remove '{' and '}'; remove '[' and ']' if e.g.
     """
     description = re.sub(r'\ ?\([\w\W]*([A-Z]{1}[0-9]{2}[A-Z]{1}[0-9]*[\/]*[0-9]*)*[\w\W]*\)', '', description)
     description = description.replace('{', '').replace('}','')
     description = re.sub('as specified in the subgroups? and ','', description)
+
+    match_eg = re.search(' \[e\.g\.,(.*)\]', description)
+    if match_eg:
+        description = re.sub(' \[e\.g\..*\]',', e.g.'+match_eg.group(1), description)
     return description
 
 def has_cpc(description):
@@ -120,6 +127,65 @@ def rm_Details(dataframe):
     dataframe = dataframe.drop(idx_to_drop)
     return dataframe.reset_index(drop=True)
 
+def reformulate_Y(description):
+    subject2adj = {'Chemistry': 'Chemical', 'Optics': 'Optical'}
+
+    if ': ' in description:
+        head, tail = description.split(': ')
+
+        tokenized_head = word_tokenize(head)
+        pos_head_nltk = nltk.pos_tag(tokenized_head)
+        synset_head_wn = [w for w in wn.synsets(tokenized_head[-1]) if w.name().split('.')[0] == tokenized_head[-1]]
+
+        tokenized_tail = word_tokenize(tail)
+        pos_tail_nltk = nltk.pos_tag(tokenized_tail)
+        synset_tail_wn = [w for w in wn.synsets(tokenized_tail[-1]) if w.name().split('.')[0] == tokenized_tail[-1]]
+
+        if head in ['Data processing', 'Compositions', 'Amusement devices']:
+            description = tail
+
+        elif tail in ['apparatus', 'processes'] or ((len(synset_head_wn) == 1 and synset_head_wn[0].pos() == 'a') or pos_head_nltk[-1][1] == 'JJ'):
+            description = head + ' ' + tail
+
+        elif len(tokenized_tail) == 3 and pos_tail_nltk[0][1] in ['VBG', 'NN', 'NNS'] and pos_tail_nltk[1][1] == ',' and pos_tail_nltk[2][1] in ['JJ', 'NN', 'NNS'] and tokenized_tail[0] in ['apparatus', 'processes']:
+            head = head[0].lower() + head[1:]
+            tokenized_tail[2] = tokenized_tail[2][0].upper() + tokenized_tail[2][1:]
+            description = ' '.join([tokenized_tail[2], head, tokenized_tail[0]])
+
+        elif any([w in ['therein', 'thereof', 'therefor', 'therewith'] for w in tokenized_tail]):
+            tail = tail[0].upper() + tail[1:]
+            head = head[0].lower() + head[1:]
+            match_therexxx = re.search('there(in)|there(for)|there(with)|there(of)', tail)
+            if match_therexxx:  description = re.sub('therein|therefor|therewith|thereof', match_therexxx.group()[5:] + ' ' + head, tail)
+
+        elif head in subject2adj.keys():
+            if pos_tail_nltk[0][1] in ['VBG', 'NN', 'NNS']:
+                head = subject2adj[head]
+                description = head + ' ' + tail
+            else:
+                tail = tail[0].upper() + tail[1:]
+                head = head[0].lower() + head[1:]
+                description = tail + ' of ' + head
+
+        elif (len(synset_tail_wn) == 1 and synset_tail_wn[0].pos() == 'a') or pos_tail_nltk[-1][1] == 'JJ':
+            tail = tail[0].upper() + tail[1:]
+            head = head[0].lower() + head[1:]
+            description = tail + ' ' + head
+
+        elif pos_tail_nltk[-1][1] in ['VBG', 'NN', 'NNS']:
+            tail = tail[0].upper() + tail[1:]
+            head = head[0].lower() + head[1:]
+
+            if tokenized_tail[-2:] == ['of', 'making']:
+                description = tail + ' ' + head
+            else:
+                description = tail + ' of ' + head
+        print(description)
+        
+    return description
+
+
+
 def read_label_file(file_name, max_level=TARGET_LEVEL):
     df = pd.read_csv(file_name, header=None, sep='\t', dtype=object, names=['code', 'lvl', 'description']) # cpc files downloaded from https://www.cooperativepatentclassification.org/cpcSchemeAndDefinitions/bulk
     df['lvl'] = df.apply(get_level, axis=1)
@@ -132,6 +198,9 @@ def read_label_file(file_name, max_level=TARGET_LEVEL):
     df['description'] = df['description'].apply(clean_descr)
     df = rm_title_with_subtree(df)
     df = rm_Details(df)
+
+    if 'Y_' in file_name:
+        df['description'] = df['description'].apply(reformulate_Y)
     return df
 
 def find_parent_node(df, child_lvl, diff=1):
