@@ -15,10 +15,14 @@ def load_tree(file_name):
     return root_node
 
 def is_leaf_node(node) -> bool:
-    if not node.name:   return False
+    if not node.name:
+        return False
+
     if node.children:
-        for child in node.children:
-            return is_leaf_node(child)
+        if any([is_leaf_node(child) for child in node.children]):
+            return False
+        else:
+            return True
     else:
         return True
 
@@ -49,10 +53,12 @@ if __name__ == '__main__':
         for node in nodes_entity_todo:
             if '@@@' in node.name or re.search(descriptive_patterns, node.name.lower(), re.IGNORECASE) or len([word for word in node.name.lower().split() if word in preposition_list])>2 or len(node.name.split())>5:
                 node.name = ''
+            if is_leaf_node(node):  node = split_leaf_node(node)
 
         for node in nodes_desc_todo:
             if not ('@@@' in node.name or re.search(descriptive_patterns, node.name.lower(), re.IGNORECASE) or len([word for word in node.name.lower().split() if word in preposition_list])>2 or len(node.name.split())>5):
-                node.name = ''
+                 node.name = ''
+            if is_leaf_node(node):  node = split_leaf_node(node)
 
         # save updated tree in a new file
         output_file_ents = input_path / (tree_entities.name + '_entities.txt')

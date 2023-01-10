@@ -180,11 +180,7 @@ def reformulate_Y(description):
                 description = tail + ' ' + head
             else:
                 description = tail + ' of ' + head
-        print(description)
-        
     return description
-
-
 
 def read_label_file(file_name, max_level=TARGET_LEVEL):
     df = pd.read_csv(file_name, header=None, sep='\t', dtype=object, names=['code', 'lvl', 'description']) # cpc files downloaded from https://www.cooperativepatentclassification.org/cpcSchemeAndDefinitions/bulk
