@@ -4,6 +4,9 @@ import nltk, re
 from nltk.tokenize import word_tokenize
 from nltk.corpus import wordnet as wn
 
+# nltk.download('wordnet')
+# nltk.download('omw-1.4')
+
 
 global TARGET_LEVEL, MAX_DEPTH
 TARGET_LEVEL, MAX_DEPTH = 6, 0
