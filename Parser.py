@@ -76,9 +76,9 @@ class Parser:
             pos = parent_words[::-1].index(child_fst_word)
             # remove tail part of parent node starting with the same preprosition
             parent_words = parent_words[:-(pos+1)]
-            child_title = " ".join(parent_words + [child_title])
+            child_title = " @@@".join(parent_words + [child_title])
         else:
-            child_title = " ".join([parent_title, child_title])
+            child_title = " @@@".join([parent_title, child_title])
         return child_title
 
     def _split_eg(self, title: str, substitution_patterns: str) -> Node:
@@ -96,7 +96,7 @@ class Parser:
                     eg_c = eg_c.capitalize()
                 eg_p_node.children = [Node(eg_c)]
             except IndexError:
-                    pass   # child node without content
+                pass   # child node without content
 
         except ValueError: # more than one "e.g." in the title
             eg_list = [eg.strip(", ") for eg in title.split('e.g.')]
@@ -118,11 +118,11 @@ class Parser:
 
                     node_to_add = Node(eg_c)
                     try:
-                        node_to_add.children = [Node_list[-1]]
+                        node_to_add.children = [copy.deepcopy(Node_list[-1])]
                     except IndexError:
                         pass
                     Node_list.append(node_to_add)
-                eg_p_node.children = [Node_list[-1]]
+                eg_p_node.children = [copy.deepcopy(Node_list[-1])]
         return eg_p_node
 
     def _split(self, title: str) -> dict:
@@ -173,7 +173,7 @@ class Parser:
                     sa_c_node = Node(sa_c)
                     if "e.g." in sa_c_node.name:
                         sa_c_node = copy.deepcopy(self._split_eg(sa_c_node.name, patterns_to_remove))
-                    sa_p_node.children = list(copy.deepcopy(sa_p_node.children)) + [sa_c_node]
+                    sa_p_node.children = copy.deepcopy(sa_p_node.children) + (sa_c_node,)
                     res_forest[t] = sa_p_node
                 except IndexError:
                         pass   # child node with empty content            
@@ -190,7 +190,7 @@ class Parser:
         3. check if children nodes are ended with "thereof", "therefor"/"therefore" and "therewith" (without "or" also in the title), if true remove them   # TODO
         """
         p_name = p_node.name
-        c_nodes = [c for c in c_nodes if c.name != p_name]
+        c_nodes = [c for c in c_nodes if c.name.lower() != p_name.lower()]
 
         dict_name_descendants = defaultdict(list)  # values of dictionary are lists of Nodes
         for c in c_nodes:
@@ -221,8 +221,8 @@ class Parser:
                     c.name = " ".join(words_list)
 
             # if the first character of children node is in lower case, then concatenate with parent node
-            if c.name[0].islower(): 
-                c.name = self._attach_to_parent(p_name, c.name, c.name.split()[0], for_eg= False)
+            if c.name[0].islower() or c.name.split()[0].lower() in self.prep_list:
+                c.name = self._attach_to_parent(p_name, c.name, c.name.split()[0], for_eg=False)
 
                 c_descendants = list(copy.deepcopy(c.children))
                 if c_descendants:
@@ -230,7 +230,7 @@ class Parser:
                         des = copy.deepcopy(c_descendants[j])
                         if des.name[0].islower():                                                
                             des.parent.name = c.name
-                            des.name = self._attach_to_parent(p_name, des.name, des.name.split()[0], for_eg= False)
+                            des.name = self._attach_to_parent(p_name, des.name, des.name.split()[0], for_eg=False)
                             c_descendants[j] = des
                     c.children = c_descendants
             c_nodes[i] = c
@@ -273,20 +273,17 @@ class Parser:
                 sa_p =  sa_p.strip(", ")
                 sa_c =  sa_c.strip(", ")
                 node.name = sa_p
-                node.children = list(copy.deepcopy(node.children)) + [Node(sa_c)]    
-
+                node.children = copy.deepcopy(node.children) + (Node(sa_c),)    
+            
             # check if node starts with "Details", lift the current node up one level if so
             if node.name[:7].lower() == "details" or node.name[-7:].lower() == "details":
-                try:
+                if node.parent:
                     if node.children:
-                        node.parent.children = node.children
-                        for c_node in node.children:
-                            c_node.parent = node.parent
+                        node.parent.children = copy.deepcopy(node.parent.children) + copy.deepcopy(node.children)
                     else:
                         node.parent.children = []
-                except Exception as e:
-                    print(e)
-                    #print("error with it: ", node) #TODO
+                else:
+                    pass # TODO
 
             # remove "[" at the end of title (happens in domain Y) or "[" at the end of title but without "[" before
             node.name = node.name.rstrip("[ ")
