@@ -9,7 +9,7 @@ from nltk.corpus import wordnet as wn
 
 
 global TARGET_LEVEL, MAX_DEPTH
-TARGET_LEVEL, MAX_DEPTH = 6, 0
+TARGET_LEVEL, MAX_DEPTH = 8, 2
 
 global dict_lvl
 dict_lvl = {1: -3, 3: -2, 4: -1, 6: 0}

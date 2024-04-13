@@ -3,18 +3,21 @@ from anytree import Node, PostOrderIter, PreOrderIter
 from collections import defaultdict
 from tqdm import tqdm
 import re, copy
-import spacy
+
 
 class Parser:
     """
     Basic parser for spliting cpc titles into taxonomy structure.
     """
-    def __init__(self, prepositions_file='prep_en.txt', synonym_file='synonyms.txt'):
+    def __init__(self, output_dir, prepositions_file='prep_en.txt'):
+
         self.prep_file = prepositions_file
-        self.synonym_outpath = synonym_file
+        self.synonym_outpath = Path(output_dir) / "synonyms.txt"
         self.prep_list = open(self.prep_file, 'r').read().splitlines()
         self.there_dict = {"thereof": "of", "therefor": "for", "therefore": "for", "therewith": "with", "therein": "in"}
-        # self.pos_tagger = spacy.load("en_core_web_sm", disable=["textcat", "ner", "lemmatizer"])
+
+        self.bracket_regex = re.compile(r"\[\S*\],?;?")
+        self.ie_regex = re.compile(r"i\.e\.?\s([^;,]*)")
 
     def _filter(self, title: str) -> bool:
         if "their" in title:
@@ -38,7 +41,7 @@ class Parser:
         Remove "[" "]"" from title and save synonyms (e.g. Support Vector Machine [SVM]) 
 
         """
-        in_brackets = [e for e in re.finditer(r"(\[\S*\]),?;?", title)]
+        in_brackets = self.bracket_regex.finditer(title)
         if in_brackets:
             with open(self.synonym_outpath, "a") as out_f:
                 out_f.write(title + "\t" + in_brackets[0].group(1).strip(" ,") + "\n")
@@ -51,7 +54,7 @@ class Parser:
         return title
     
     def _get_syns_by_ie(self, title: str) -> str:
-        starts_by_ie = [e for e in re.finditer(r"i\.e\.?\s([^;,]*)", title)]
+        starts_by_ie = self.ie_regex.finditer(title)
         if starts_by_ie:
             with open(self.synonym_outpath, "a") as out_f:
                 out_f.write(title + "\t" + starts_by_ie[0].group(1).strip(" ,") + "\n")

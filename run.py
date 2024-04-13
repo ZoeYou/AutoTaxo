@@ -44,8 +44,9 @@ if __name__ == '__main__':
         already_done = [f"cpc-titles/cpc-section-{str(f).split('/')[1].split('.')[0]}_20240101.txt" for f in Path(OUTPUT_DIR).glob("*.txt")]
         files_list = list(set(files_list) - set(already_done))
 
-        parser = Parser.Parser()
-        pool = multiprocessing.Pool(9)
+        parser = Parser.Parser(output_dir = output_path)
+
+        pool = multiprocessing.Pool(len(files_list))
         for res_root, name in pool.imap_unordered(get_root_node, files_list):
             save_tree(res_root, output_path / (name + '.pickle'))
             if PRINT_TREE:
@@ -64,7 +65,7 @@ if __name__ == '__main__':
             res_root = load_tree(f)
             dict_trees[str(f).split(".")[0].split("/")[-1]] = res_root
 
-        with open(Path(OUTPUT_DIR) / 'hHs.csv', "w", newline='') as csv_f:
+        with open(Path(OUTPUT_DIR) / 'hHs.tsv', "w", newline='') as csv_f:
             writer = csv.writer(csv_f, delimiter="\t", quoting=csv.QUOTE_MINIMAL)
             for f, root_node in tqdm(dict_trees.items()):
                 # in pre-order iteration of tree
