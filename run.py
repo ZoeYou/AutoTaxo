@@ -1,11 +1,11 @@
 from anytree import RenderTree, PostOrderIter, PreOrderIter
 import Parser
-import csv
 from preprocessing import *
 
 from pathlib import Path
 from tqdm import tqdm
 import multiprocessing, pickle
+import pandas as pd
 
 CREATE_CSV = True   # create term-hypernym pairs based on taxonomy => save in csv file
 PRINT_TREE = True
@@ -46,18 +46,20 @@ if __name__ == '__main__':
 
         parser = Parser.Parser(output_dir = output_path)
 
-        pool = multiprocessing.Pool(len(files_list))
-        for res_root, name in pool.imap_unordered(get_root_node, files_list):
-            save_tree(res_root, output_path / (name + '.pickle'))
-            if PRINT_TREE:
-                # print taxonomy tree in an text file
-                output_file = output_path / (name + '.txt')
-                with output_file.open('w') as out_f:
-                    for pre, _, node in RenderTree(res_root):
-                        out_f.write("%s%s" % (pre, node.name))
-                        out_f.write("\n")
-        pool.close()
-        pool.join()
+        if len(files_list):
+            pool = multiprocessing.Pool(len(files_list))
+            
+            for res_root, name in pool.imap_unordered(get_root_node, files_list):
+                save_tree(res_root, output_path / (name + '.pickle'))
+                if PRINT_TREE:
+                    # print taxonomy tree in an text file
+                    output_file = output_path / (name + '.txt')
+                    with output_file.open('w') as out_f:
+                        for pre, _, node in RenderTree(res_root):
+                            out_f.write("%s%s" % (pre, node.name))
+                            out_f.write("\n")
+            pool.close()
+            pool.join()
 
     if CREATE_CSV:  # save term-hyponym pairs into csv file
         tree_files = sorted([str(f) for f in output_path.glob("*.pickle")])
@@ -65,10 +67,13 @@ if __name__ == '__main__':
             res_root = load_tree(f)
             dict_trees[str(f).split(".")[0].split("/")[-1]] = res_root
 
-        with open(Path(OUTPUT_DIR) / 'hHs.tsv', "w", newline='') as csv_f:
-            writer = csv.writer(csv_f, delimiter="\t", quoting=csv.QUOTE_MINIMAL)
-            for f, root_node in tqdm(dict_trees.items()):
-                # in pre-order iteration of tree
-                nodes = [node for node in PreOrderIter(root_node)]
-                for node in nodes[2:]:
-                    writer.writerow([f, node.name, node.parent.name])
+        pairs = []
+        print("Saving term-hypernym pairs into tsv file...")
+        for f, root_node in tqdm(dict_trees.items()):
+            # in pre-order iteration of tree
+            nodes = [node for node in PreOrderIter(root_node)]
+            for node in nodes[2:]:
+                pairs.append([f, node.name, node.parent.name])
+
+        df = pd.DataFrame(pairs, columns=["file", "term", "hypernym"])
+        df.to_csv(output_path / 'hHs.tsv', header=False, index=False, sep="\t")

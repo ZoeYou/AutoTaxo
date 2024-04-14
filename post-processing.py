@@ -99,8 +99,8 @@ if __name__ == '__main__':
     if CREATE_CSV:
         # remove existing csv file
         try:
-            Path(input_path / 'hHs_ents.csv').unlink()
-            Path(input_path / 'hHs_desc.csv').unlink()
+            Path(input_path / 'hHs_ents.tsv').unlink()
+            Path(input_path / 'hHs_desc.tsv').unlink()
         except FileNotFoundError:
             pass
     

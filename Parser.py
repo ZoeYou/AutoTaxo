@@ -3,6 +3,7 @@ from anytree import Node, PostOrderIter, PreOrderIter
 from collections import defaultdict
 from tqdm import tqdm
 import re, copy
+from pathlib import Path
 
 
 class Parser:
@@ -141,8 +142,6 @@ class Parser:
 
         # 1. split by semicolon 
         titles = title.split(";")
-        if len(titles) == 1:
-            pass # TODO or split by parallel structure (detected by pos tagging)
             
         patterns_to_remove = r"[ ,]?((in general|or the like|or other parts|not provided for elsewhere|specified in the subgroup)$|other than .*)"
         patterns_to_remove_head = r"^Other "
